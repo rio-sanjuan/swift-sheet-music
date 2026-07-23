@@ -71,6 +71,14 @@ extension Note {
         appendParentheses(into: &children, targetVersion: options.targetVersion)
         children.append(XMLTreeNode(name: "pitch", text: String(pitch)))
         children.append(XMLTreeNode(name: "tpc", text: String(tpc)))
+        // Tab voicing: <fret> then <string>, between <tpc> and <head>
+        // — mirrors TWrite's Pid order (FRET, STRING before HEAD_TYPE).
+        if let fret {
+            children.append(XMLTreeNode(name: "fret", text: String(fret)))
+        }
+        if let string {
+            children.append(XMLTreeNode(name: "string", text: String(string)))
+        }
         if let headType {
             children.append(XMLTreeNode(name: "head", text: headType))
         } else if let drumDefaultHead {

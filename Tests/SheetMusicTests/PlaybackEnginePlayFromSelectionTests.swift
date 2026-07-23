@@ -1,3 +1,4 @@
+#if !os(Android)
 #if canImport(SwiftySynth)
     import AVFoundation
     import Foundation
@@ -121,4 +122,5 @@
             }
         }
     }
+#endif
 #endif

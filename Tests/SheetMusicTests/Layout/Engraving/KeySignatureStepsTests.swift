@@ -1,3 +1,4 @@
+#if !os(Android)
 import CoreGraphics
 @testable import SheetMusicLayout
 import Testing
@@ -36,3 +37,4 @@ struct KeySignatureStepsTests {
         #expect(KeySignatureSteps.stepDy(step: -1, sp: sp) == 2)
     }
 }
+#endif

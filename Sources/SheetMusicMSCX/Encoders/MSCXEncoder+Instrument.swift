@@ -14,17 +14,13 @@ extension Instrument {
         if let trackName {
             children.append(XMLTreeNode(name: "trackName", text: trackName))
         }
-        if let v = minPitchPlayable {
-            children.append(XMLTreeNode(name: "minPitchP", text: String(v)))
-        }
-        if let v = maxPitchPlayable {
-            children.append(XMLTreeNode(name: "maxPitchP", text: String(v)))
-        }
-        if let v = minPitchAmateur {
-            children.append(XMLTreeNode(name: "minPitchA", text: String(v)))
-        }
-        if let v = maxPitchAmateur {
-            children.append(XMLTreeNode(name: "maxPitchA", text: String(v)))
+        let pitchRanges: [(String, Int?)] = [
+            ("minPitchP", minPitchPlayable), ("maxPitchP", maxPitchPlayable),
+            ("minPitchA", minPitchAmateur), ("maxPitchA", maxPitchAmateur),
+        ]
+        for (name, value) in pitchRanges {
+            guard let value else { continue }
+            children.append(XMLTreeNode(name: name, text: String(value)))
         }
         if useDrumset {
             // MuseScore Studio looks up the drumset template by the
@@ -65,6 +61,9 @@ extension Instrument {
                 children: drumChildren,
             ))
         }
+        if let stringData {
+            children.append(stringData.mscxNode())
+        }
         for art in articulations {
             children.append(art.encode())
         }
@@ -76,6 +75,25 @@ extension Instrument {
             attributes: ["id": id],
             children: children,
         )
+    }
+}
+
+extension StringData {
+    /// `<StringData>`: `<frets>` then one `<string>` per tuning in
+    /// document order (low → high). Mirrors
+    /// `TWrite::write(const StringData*)`.
+    func mscxNode() -> XMLTreeNode {
+        var children: [XMLTreeNode] = [
+            XMLTreeNode(name: "frets", text: String(frets)),
+        ]
+        for tuning in strings {
+            children.append(XMLTreeNode(
+                name: "string",
+                attributes: tuning.open ? ["open": "1"] : [:],
+                text: String(tuning.pitch),
+            ))
+        }
+        return XMLTreeNode(name: "StringData", children: children)
     }
 }
 

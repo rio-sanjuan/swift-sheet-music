@@ -33,6 +33,25 @@ extension Instrument {
                   let line = Int(lineStr) else { continue }
             drumLineMap[pitch] = line
         }
+        // <StringData><frets>19</frets><string open="1">40</string>…
+        // — fretted-instrument tuning table. Strings appear in
+        // document order (low → high pitch). Malformed <string>
+        // entries are silently dropped (permissive policy); a
+        // malformed <frets> falls back to MuseScore's default 19.
+        var stringData: StringData?
+        if let sd = node.first("StringData") {
+            let strings: [StringData.StringTuning] = sd.all("string").compactMap { s in
+                guard let pitch = Int(s.text) else { return nil }
+                return StringData.StringTuning(
+                    pitch: pitch,
+                    open: s.attributes["open"] == "1",
+                )
+            }
+            stringData = StringData(
+                frets: sd.first("frets").flatMap { Int($0.text) } ?? 19,
+                strings: strings,
+            )
+        }
         return Instrument(
             id: id,
             longName: longName,
@@ -46,6 +65,7 @@ extension Instrument {
             channels: channels,
             useDrumset: useDrumset,
             drumLineMap: drumLineMap,
+            stringData: stringData,
         )
     }
 }

@@ -18,7 +18,7 @@ extension ScoreLayerBuilder {
         metrics: StaffMetrics, height: CGFloat,
         into parent: CALayer,
     ) -> CAShapeLayer? {
-        let clef = NotatedClef(rawType: rawType)
+        let clef = NotatedClef(rawType: rawType) ?? .treble
         let glyph: Character
         let yOffset: CGFloat
         switch clef {
@@ -36,6 +36,8 @@ extension ScoreLayerBuilder {
         case .baritone: glyph = SMuFLGlyph.cClef; yOffset = -2 * metrics.sp
         case .percussion: glyph = SMuFLGlyph.percussionClef; yOffset = 0
         case .percussion2: glyph = SMuFLGlyph.percussionClef2; yOffset = 0
+        case .tab: glyph = SMuFLGlyph.sixStringTabClef; yOffset = 0
+        case .tab4: glyph = SMuFLGlyph.fourStringTabClef; yOffset = 0
         }
         guard let layer = glyphLayer(
             glyph,

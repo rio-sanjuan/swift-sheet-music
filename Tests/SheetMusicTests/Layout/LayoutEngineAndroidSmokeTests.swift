@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicCore
 @testable import SheetMusicLayout
@@ -25,3 +26,4 @@ struct LayoutEngineAndroidSmokeTests {
         #expect(!document.systems.isEmpty)
     }
 }
+#endif

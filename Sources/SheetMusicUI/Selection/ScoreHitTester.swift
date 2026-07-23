@@ -447,14 +447,14 @@ public struct ScoreHitTester: Sendable {
     private static func clefYOffset(
         rawType: String, sp: CGFloat,
     ) -> CGFloat {
-        switch NotatedClef(rawType: rawType) {
+        switch NotatedClef(rawType: rawType) ?? .treble {
         case .treble, .treble8va, .treble8vb, .treble15ma, .treble15mb:
             sp
         case .bass, .bass8va, .bass8vb:
             -sp
         case .soprano:
             2 * sp
-        case .alto, .percussion, .percussion2:
+        case .alto, .percussion, .percussion2, .tab, .tab4:
             0
         case .tenor:
             -sp

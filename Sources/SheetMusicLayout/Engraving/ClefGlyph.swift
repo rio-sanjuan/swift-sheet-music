@@ -32,6 +32,8 @@ public enum ClefGlyph {
         case .baritone: (SMuFLCodepoint.cClef, -2)
         case .percussion: (SMuFLCodepoint.percussionClef, 0)
         case .percussion2: (SMuFLCodepoint.percussionClef2, 0)
+        case .tab: (SMuFLCodepoint.sixStringTabClef, 0)
+        case .tab4: (SMuFLCodepoint.fourStringTabClef, 0)
         }
     }
 }

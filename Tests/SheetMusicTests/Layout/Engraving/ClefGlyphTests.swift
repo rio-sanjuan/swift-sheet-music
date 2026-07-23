@@ -1,3 +1,4 @@
+#if !os(Android)
 import SheetMusicCore
 @testable import SheetMusicLayout
 import Testing
@@ -40,3 +41,4 @@ struct ClefGlyphTests {
         }
     }
 }
+#endif

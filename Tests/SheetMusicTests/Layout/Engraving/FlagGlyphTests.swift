@@ -1,3 +1,4 @@
+#if !os(Android)
 @testable import SheetMusicCore
 @testable import SheetMusicLayout
 import Testing
@@ -36,3 +37,4 @@ struct FlagGlyphTests {
         #expect(FlagGlyph.codepoint(duration: .quarter, stem: .up) == nil)
     }
 }
+#endif

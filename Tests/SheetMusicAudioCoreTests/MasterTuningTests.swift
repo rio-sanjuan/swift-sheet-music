@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicAudioCore
 import Testing
@@ -60,3 +61,4 @@ struct MasterTuningTests { // swiftlint:disable:this inclusive_language
         #expect(m[2] == MasterTuning.CC(controller: 6, value: 63)) // 64 + (-1)
     }
 }
+#endif

@@ -45,6 +45,17 @@ public struct Note: Sendable, Equatable {
     /// note is still engraved but emits no MIDI. C++: `Note::play()`,
     /// which gates `CompatMidiRender::collectNote`.
     public var play: Bool
+    /// Fret number on a tablature staff (`<fret>`). `nil` on
+    /// non-tab notes. Pitch stays the structural source of truth —
+    /// fret/string are the tab *voicing* of that pitch and can be
+    /// re-derived from `Instrument.stringData` when absent.
+    /// C++: `Note::fret()`.
+    public var fret: Int?
+    /// String index on a tablature staff (`<string>`), 0 = the TOP
+    /// tab line (MuseScore convention; MusicXML's 1 = highest string
+    /// is converted at import). `nil` on non-tab notes.
+    /// C++: `Note::string()`.
+    public var string: Int?
     /// Base element properties shared with every engravable element.
     /// Currently carries only `<visible>`; see `ElementProperties`.
     public var elementProperties: ElementProperties
@@ -68,6 +79,8 @@ public struct Note: Sendable, Equatable {
         parentheses: NoteParentheses = .none,
         isSmall: Bool = false,
         play: Bool = true,
+        fret: Int? = nil,
+        string: Int? = nil,
         visible: Bool = true,
     ) {
         self.pitch = pitch
@@ -82,6 +95,8 @@ public struct Note: Sendable, Equatable {
         self.parentheses = parentheses
         self.isSmall = isSmall
         self.play = play
+        self.fret = fret
+        self.string = string
         elementProperties = ElementProperties(visible: visible)
     }
 }

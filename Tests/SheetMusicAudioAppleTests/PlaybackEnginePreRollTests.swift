@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicAudioApple
 import SheetMusicAudioCore
@@ -236,3 +237,4 @@ struct PlaybackEnginePreRollTests {
         ) == nil)
     }
 }
+#endif

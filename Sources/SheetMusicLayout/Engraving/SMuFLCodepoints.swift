@@ -28,6 +28,8 @@ public enum SMuFLCodepoint {
     public static let fClef15ma: UInt32 = 0xE066
     public static let percussionClef: UInt32 = 0xE069
     public static let percussionClef2: UInt32 = 0xE06A
+    public static let sixStringTabClef: UInt32 = 0xE06D
+    public static let fourStringTabClef: UInt32 = 0xE06E
 
     // MARK: - Flags
 

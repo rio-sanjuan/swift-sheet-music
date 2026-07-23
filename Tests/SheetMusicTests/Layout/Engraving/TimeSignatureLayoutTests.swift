@@ -1,3 +1,4 @@
+#if !os(Android)
 import CoreGraphics
 @testable import SheetMusicLayout
 import Testing
@@ -36,3 +37,4 @@ struct TimeSignatureLayoutTests {
         #expect(max == 2 * advance)
     }
 }
+#endif

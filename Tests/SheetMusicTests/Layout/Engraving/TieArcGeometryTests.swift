@@ -1,3 +1,4 @@
+#if !os(Android)
 import CoreGraphics
 @testable import SheetMusicLayout
 import Testing
@@ -49,3 +50,4 @@ struct TieArcGeometryTests {
         #expect(above.p2.y == -below.p2.y)
     }
 }
+#endif

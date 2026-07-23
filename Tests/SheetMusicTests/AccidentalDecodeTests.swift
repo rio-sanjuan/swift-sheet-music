@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicCore
 import Testing
@@ -83,4 +84,5 @@ struct AccidentalDecodeTests {
             }
         }
     }
+#endif
 #endif

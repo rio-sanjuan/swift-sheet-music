@@ -7,10 +7,19 @@ extension Staff {
     /// portion of an inside-`<Part><Staff>` element. Measures are
     /// added separately during pairing — see
     /// `assembleParts(decoded:topLevel:)`.
-    static func declared(_ node: XMLTreeNode) -> (mscxID: String?, staff: Staff) {
+    static func declared(_ node: XMLTreeNode) -> (mscxID: String?, linkedToID: String?, staff: Staff) {
         let staffTypeNode = node.first("StaffType")
         let staffType = staffTypeNode?.first("name")?.text ?? "stdNormal"
         let group = staffTypeNode?.attributes["group"] ?? "pitched"
+        // Typed <StaffType> children (line count, generated-element
+        // flags, tab style). Absent element → all defaults.
+        let typeProperties = staffTypeNode.map {
+            StaffTypeProperties.decode($0, group: group)
+        } ?? StaffTypeProperties()
+        // <linkedTo> carries the score-global staff id this staff is
+        // linked to (standard+tab pairs). Resolved to an index within
+        // the part by `Part.decodePairing`, which sees all siblings.
+        let linkedToID = node.first("linkedTo")?.text
         // Default clef. MuseScore writes one of three forms (see
         // engraving/rw/read460/tread.cpp:3948-3955):
         //   * `<defaultClef>X</defaultClef>` — sets BOTH concert &
@@ -53,9 +62,10 @@ extension Staff {
             ))
         }
 
-        return (mscxID, Staff(
+        return (mscxID, linkedToID, Staff(
             staffType: staffType,
             group: group,
+            typeProperties: typeProperties,
             defaultClefType: defaultClef,
             brackets: brackets,
             measures: [],

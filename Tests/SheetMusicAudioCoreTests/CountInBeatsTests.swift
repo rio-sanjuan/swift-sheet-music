@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicAudioCore
 import SheetMusicCore
@@ -165,3 +166,4 @@ struct CountInBeatsTests {
         #expect(CountInBeats.compute(score: empty, startCursor: nil) == nil)
     }
 }
+#endif

@@ -10,7 +10,7 @@ enum ClefRenderer {
         origin: CGPoint,
         metrics: StaffMetrics,
     ) {
-        let clef = NotatedClef(rawType: rawType)
+        let clef = NotatedClef(rawType: rawType) ?? .treble
         let (codepoint, yOffsetSp) = ClefGlyph.glyph(for: clef)
         // swiftlint:disable:next force_unwrapping
         let glyph = Character(UnicodeScalar(codepoint)!)

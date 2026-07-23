@@ -85,7 +85,7 @@
             #expect(NotatedClef(rawType: "F") == .bass)
             #expect(NotatedClef(rawType: "C3") == .alto)
             #expect(NotatedClef(rawType: "C4") == .tenor)
-            #expect(NotatedClef(rawType: "unknown") == .treble)
+            #expect(NotatedClef(rawType: "unknown") == nil)
         }
 
         @Test("PERC and PERC2 parse and round-trip distinctly")

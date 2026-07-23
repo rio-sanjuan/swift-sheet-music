@@ -23,12 +23,17 @@ public enum NotatedClef: Sendable, Equatable, Hashable, CaseIterable {
     case baritone // C4 on line 5 (top)
     case percussion // unpitched 5-line drum staff (single rectangle glyph)
     case percussion2 // unpitched 5-line drum staff (two vertical bars glyph)
+    case tab // tablature, 6-string-style glyph (SMuFL 6stringTabClef)
+    case tab4 // tablature, 4-string-style glyph (SMuFL 4stringTabClef)
 
     /// Parse a `Clef.concertClefType` string (MuseScore encoding).
     /// Accepts canonical forms (`"G"`, `"F8vb"`, …) and the legacy
     /// aliases MuseScore itself emits (`"treble"`, `"bass"`, …).
-    /// Unrecognized strings collapse to `.treble`.
-    public init(rawType: String) {
+    /// Fails on unrecognized strings — each call site chooses its own
+    /// fallback explicitly (layout defaults to `.treble`) so a future
+    /// clef addition can't be silently misrendered as treble. See
+    /// `docs/adding-a-clef.md` for the extension checklist.
+    public init?(rawType: String) {
         switch rawType {
         case "G", "G1", "G2", "treble": self = .treble
         case "G8va": self = .treble8va
@@ -44,7 +49,9 @@ public enum NotatedClef: Sendable, Equatable, Hashable, CaseIterable {
         case "C5", "baritone": self = .baritone
         case "PERC", "percussion": self = .percussion
         case "PERC2": self = .percussion2
-        default: self = .treble
+        case "TAB", "TAB_SERIF", "tab": self = .tab
+        case "TAB4", "TAB4_SERIF": self = .tab4
+        default: return nil
         }
     }
 
@@ -69,6 +76,8 @@ public enum NotatedClef: Sendable, Equatable, Hashable, CaseIterable {
         case .baritone: "C5"
         case .percussion: "PERC"
         case .percussion2: "PERC2"
+        case .tab: "TAB"
+        case .tab4: "TAB4"
         }
     }
 }

@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicAudioApple
 import SheetMusicAudioCore
@@ -112,3 +113,4 @@ struct PlaybackUnrollCursorTests {
         ) == timeline.frame(atTick: 480)?.cursor)
     }
 }
+#endif

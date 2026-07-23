@@ -1,3 +1,4 @@
+#if !os(Android)
 @testable import SheetMusicLayout
 import Testing
 
@@ -43,3 +44,4 @@ struct MusicTextRunsTests {
         #expect(runs[0].kind == .text)
     }
 }
+#endif

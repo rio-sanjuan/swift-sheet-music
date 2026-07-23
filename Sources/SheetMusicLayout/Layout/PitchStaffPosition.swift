@@ -51,6 +51,10 @@ public enum PitchStaffPosition {
         case .baritone: midLineDiatonic = 3 * 7 + 3 // F3
         case .percussion: midLineDiatonic = 4 * 7 + 6 // positional (B4)
         case .percussion2: midLineDiatonic = 4 * 7 + 6 // positional (B4)
+        // Tab staves place by string index (TabStaffPosition), never
+        // by pitch; this arm only anchors the fallback when a tab
+        // clef leaks onto a pitched placement path.
+        case .tab, .tab4: midLineDiatonic = 4 * 7 + 6 // positional (B4)
         }
         return StaffStep(diatonicAbs - midLineDiatonic)
     }

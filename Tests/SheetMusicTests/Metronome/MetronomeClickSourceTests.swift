@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicAudioCore
 import Testing
@@ -22,3 +23,4 @@ struct MetronomeClickSourceTests {
         #expect(provider.metronomeClickSource() == .defaultGM)
     }
 }
+#endif

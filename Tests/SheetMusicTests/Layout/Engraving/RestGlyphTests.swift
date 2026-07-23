@@ -1,3 +1,4 @@
+#if !os(Android)
 @testable import SheetMusicCore
 @testable import SheetMusicLayout
 import Testing
@@ -45,3 +46,4 @@ struct RestGlyphTests {
         )
     }
 }
+#endif

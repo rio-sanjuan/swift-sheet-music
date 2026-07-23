@@ -26,6 +26,10 @@ public struct Instrument: Sendable, Equatable {
     /// Used by the UI to position drum noteheads instead of the pitched
     /// diatonic formula.
     public var drumLineMap: [Int: Int]
+    /// String tunings for fretted instruments (`<StringData>`).
+    /// Non-nil for guitars/basses/etc.; drives fret/string
+    /// re-derivation for tab notes that lack an explicit voicing.
+    public var stringData: StringData?
 
     /// Convenience accessor for the primary (= first) channel.
     public var channel: InstrumentChannel {
@@ -45,6 +49,7 @@ public struct Instrument: Sendable, Equatable {
         channels: [InstrumentChannel] = [InstrumentChannel()],
         useDrumset: Bool = false,
         drumLineMap: [Int: Int] = [:],
+        stringData: StringData? = nil,
     ) {
         self.id = id
         self.longName = longName
@@ -58,5 +63,6 @@ public struct Instrument: Sendable, Equatable {
         self.channels = channels.isEmpty ? [InstrumentChannel()] : channels
         self.useDrumset = useDrumset
         self.drumLineMap = drumLineMap
+        self.stringData = stringData
     }
 }

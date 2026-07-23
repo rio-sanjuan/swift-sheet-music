@@ -152,6 +152,45 @@ have minor encoding differences. When something round-trips badly,
 diff the relevant `case` against `read400` / `read206` first.
 
 
+## Tablature (`<StaffType group="tablature">`)
+
+Pinned against `TWrite::write(const StaffType*)` (twrite.cpp) and
+`TRead::read(StaffType*)` (tread410/tread460.cpp):
+
+* **Common children** are emitted only when they differ from the
+  `stdNormal` defaults: `lines` (≠5), `lineDistance` (≠1.0, spatium
+  units — tab presets use 1.5), `clef` (= genClef, only when *false*),
+  `stemless` (when true; legacy alias `slashStyle`, whose read also
+  derives `showBackTied = !stemless` for 2.0.2 compat), `barlines` /
+  `timesig` (only when false). `keysig` appears only on
+  standard/percussion staves — tablature forces key signatures off at
+  read time.
+* **Tab-only children** are written unconditionally, in order:
+  `durations`, `durationFontName/Size/Y`, `symbolRepeat` (≠0 only),
+  fret font (≤4.5: `fretFontName/Size/Y`; 4.6+: `fretUseTextStyle` +
+  `fretTextStyle` | `fretPresetIdx`), `linesThrough`, `minimStyle`
+  (0 none / 1 shorter / 2 slashed), `onLines`, `showRests`,
+  `stemsDown`, `stemsThrough`, `upsideDown`, `showTabFingering`
+  (when true), `useNumbers`, `showBackTied` (only ≠ `!stemless`).
+  Booleans serialize as `0`/`1`. 4.6's reader no longer accepts
+  `fretFontName` (skipped as unknown) — our decoder accepts both
+  spellings; our encoder emits the classic set.
+* **Presets** (stafftype.cpp `initStaffTypes`): Simple = stemless,
+  no timesig, no rests, minim none; Common (default) = minim
+  shorter; Full = minim slashed + stems through. All modern presets:
+  lines = string count, lineDistance 1.5, fret font 9 pt, duration
+  font 15 pt.
+* **`<StringData>`** (inside `<Instrument>`): `<frets>` then one
+  `<string [open="1"]>` per tuning, LOW→HIGH pitch (guitar EADGBE =
+  40 45 50 55 59 64). `Note.string` counts tab lines top-down, so
+  string index `s` of L strings tunes to `strings[L - 1 - s]`.
+* **`<Note>` order**: `fret` then `string` sit between `tpc` and
+  `head` (TWrite Pid list). `<ghost>` marks a parenthesized fret,
+  `<dead>` an X fret.
+* **Linked pairs**: `<linkedTo>` (score-global staff id) in the
+  Part's staff declaration; both staves carry full measure content,
+  so rendering needs no link semantics — only playback dedupe does.
+
 ## Where to look next
 
 * **Tempo / metronome:** `engraving/playback/playbackeventsrenderer.cpp`

@@ -123,7 +123,7 @@ extension LayoutEngine {
         // an outdated default, losing any mid-piece clef changes.
         var activeClefs: [NotatedClef] = defaultClefRawTypes(
             addresses: allStaves,
-        ).map { NotatedClef(rawType: $0) }
+        ).map { NotatedClef(rawType: $0) ?? .treble }
 
         // Key signatures follow the same engraving rule: redraw the
         // currently active key at the start of every system.  Core

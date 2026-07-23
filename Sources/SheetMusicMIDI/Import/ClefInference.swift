@@ -70,6 +70,7 @@ extension MidiImporter {
         case .baritone: 53 // F3
         case .percussion: 71 // unpitched — fallback, not used for inference
         case .percussion2: 71
+        case .tab, .tab4: 71 // string-indexed — fallback, not used for inference
         }
     }
 }

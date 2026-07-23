@@ -114,7 +114,7 @@ extension LayoutEngine {
            !firstVoiceStartsWithClef(measure: measure)
         {
             synthesizeLeadingClef = true
-            currentClef = NotatedClef(rawType: rawType)
+            currentClef = NotatedClef(rawType: rawType) ?? .treble
         } else {
             synthesizeLeadingClef = false
         }
@@ -429,7 +429,7 @@ extension LayoutEngine {
                     // / stem-direction passes downstream key off the
                     // active clef regardless of glyph visibility. Only
                     // the visual emission is routed by `.visible`.
-                    currentClef = NotatedClef(rawType: clef.concertClefType)
+                    currentClef = NotatedClef(rawType: clef.concertClefType) ?? .treble
                     guard clef.visible || options.showsInvisibleElements
                     else { break }
                     let clefX = inHeader ? headerSchedule.clefX

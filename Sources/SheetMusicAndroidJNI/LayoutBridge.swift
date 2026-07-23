@@ -271,7 +271,7 @@ public enum LayoutBridge { // swiftlint:disable:this type_body_length
         switch element {
         case let .clef(rawType, origin, _):
             let (codepoint, yOffsetSp) = ClefGlyph.glyph(
-                for: NotatedClef(rawType: rawType),
+                for: NotatedClef(rawType: rawType) ?? .treble,
             )
             emitCenterAnchoredGlyph(
                 codepoint: codepoint,

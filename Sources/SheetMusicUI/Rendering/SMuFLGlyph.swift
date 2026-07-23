@@ -22,6 +22,8 @@ enum SMuFLGlyph {
     static let cClef: Character = scalar(SMuFLCodepoint.cClef)
     static let percussionClef: Character = scalar(SMuFLCodepoint.percussionClef)
     static let percussionClef2: Character = scalar(SMuFLCodepoint.percussionClef2)
+    static let sixStringTabClef: Character = scalar(SMuFLCodepoint.sixStringTabClef)
+    static let fourStringTabClef: Character = scalar(SMuFLCodepoint.fourStringTabClef)
 
     // MARK: - Noteheads — standard
 

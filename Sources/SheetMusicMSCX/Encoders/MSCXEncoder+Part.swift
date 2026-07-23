@@ -22,7 +22,14 @@ extension Part {
         )
         var children: [XMLTreeNode] = []
         for (staff, id) in zip(staves, staffIDs) {
-            children.append(staff.encodeDeclaration(staffID: id, options: options))
+            // A linked staff (standard+tab pair) references its
+            // target by the encoder-assigned score-global id.
+            let linkedToID = staff.linkedToStaffOffset.flatMap { offset in
+                staffIDs.indices.contains(offset) ? staffIDs[offset] : nil
+            }
+            children.append(staff.encodeDeclaration(
+                staffID: id, linkedToStaffID: linkedToID, options: options,
+            ))
         }
         if let trackName {
             children.append(XMLTreeNode(name: "trackName", text: trackName))

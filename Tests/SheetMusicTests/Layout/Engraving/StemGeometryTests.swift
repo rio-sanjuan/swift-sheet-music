@@ -1,3 +1,4 @@
+#if !os(Android)
 import CoreGraphics
 @testable import SheetMusicLayout
 import Testing
@@ -67,3 +68,4 @@ struct StemGeometryTests {
         #expect(down?.endY == 140)
     }
 }
+#endif

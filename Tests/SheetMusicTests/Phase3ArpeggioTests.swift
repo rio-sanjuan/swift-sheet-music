@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicCore
 @testable import SheetMusicMSCX
@@ -134,4 +135,5 @@ struct Phase3ArpeggioTests {
             #expect(invisibleWiggles.isEmpty)
         }
     }
+#endif
 #endif

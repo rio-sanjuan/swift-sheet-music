@@ -1,3 +1,4 @@
+#if !os(Android)
 import CoreGraphics
 @testable import SheetMusicCore
 @testable import SheetMusicLayout
@@ -30,3 +31,4 @@ struct TextRoleStyleTests {
         #expect(TextRoleStyle.style(for: .lyrics(color: nil)) == .lyricsOdd)
     }
 }
+#endif

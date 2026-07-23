@@ -1,3 +1,4 @@
+#if !os(Android)
 import Foundation
 @testable import SheetMusicAudioApple
 import Testing
@@ -35,3 +36,4 @@ struct SequenceMapTests {
         #expect(map.sequencerTick(fromScore: 500) == 500)
     }
 }
+#endif

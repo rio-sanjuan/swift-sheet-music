@@ -1,3 +1,4 @@
+#if !os(Android)
 @testable import SheetMusicAudioCore
 @testable import SheetMusicCore
 @testable import SheetMusicMIDI
@@ -168,3 +169,4 @@ struct AudioExportRangeResolveTests {
         #expect(range.endTick == 2880)
     }
 }
+#endif

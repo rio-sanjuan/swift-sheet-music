@@ -50,6 +50,7 @@ extension Note {
         // muted; the element is absent (→ true) for normal notes.
         let play = node.first("play")?.text != "0"
         let parentheses = decodeParentheses(node)
+        let (fret, string) = decodeTabVoicing(node)
         var note = Note(
             pitch: pitch,
             tpc: tpc,
@@ -63,9 +64,36 @@ extension Note {
             parentheses: parentheses,
             isSmall: isSmall,
             play: play,
+            fret: fret,
+            string: string,
         )
         note.elementProperties = ElementProperties(decodingMSCXChildrenOf: node)
         return note
+    }
+
+    /// Tablature voicing: `<fret>` + `<string>` (string 0 = top tab
+    /// line). Pitch stays the structural source of truth, so a
+    /// malformed value warns and drops BOTH fields — the pitch still
+    /// renders (layout re-derives a voicing from
+    /// `Instrument.stringData` when possible).
+    private static func decodeTabVoicing(
+        _ node: XMLTreeNode,
+    ) -> (fret: Int?, string: Int?) {
+        let fretText = node.first("fret")?.text
+        let stringText = node.first("string")?.text
+        guard fretText != nil || stringText != nil else { return (nil, nil) }
+        let fret = fretText.flatMap(Int.init)
+        let string = stringText.flatMap(Int.init)
+        let fretMalformed = fretText != nil && (fret ?? -1) < 0
+        let stringMalformed = stringText != nil && (string ?? -1) < 0
+        if fretMalformed || stringMalformed {
+            mscxDecoderWarn(
+                code: "mscx.note.invalidFret",
+                message: "Malformed <fret>/<string> on note — tab voicing dropped",
+            )
+            return (nil, nil)
+        }
+        return (fret, string)
     }
 
     /// Decode the `<Accidental>` child of a `<Note>` element.

@@ -7,16 +7,21 @@ extension Staff {
     /// bracket information, default clef. Measures are emitted by
     /// `encodeTopLevel(staffID:)` separately.
     func encodeDeclaration(
-        staffID: String, options: MSCXEncoderOptions = .init(),
+        staffID: String,
+        linkedToStaffID: String? = nil,
+        options: MSCXEncoderOptions = .init(),
     ) -> XMLTreeNode {
         var children: [XMLTreeNode] = []
         children.append(XMLTreeNode(
             name: "StaffType",
             attributes: ["group": group],
-            children: [
-                XMLTreeNode(name: "name", text: staffType),
-            ],
+            children: typeProperties.mscxChildren(staffTypeName: staffType),
         ))
+        if let linkedToStaffID {
+            children.append(XMLTreeNode(
+                name: "linkedTo", text: linkedToStaffID,
+            ))
+        }
         if let defaultClefType {
             children.append(XMLTreeNode(
                 name: "defaultClef", text: defaultClefType,
