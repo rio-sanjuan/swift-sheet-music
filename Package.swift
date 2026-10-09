@@ -72,6 +72,15 @@ let wasmStackLinkerSettings: [LinkerSetting] = isWasm ? [
 /// by version, and must never see `.unsafeFlags`.
 let isJNILibraryBuild = ProcessInfo.processInfo.environment["SWIFT_SHEET_MUSIC_JNI_LIBRARY"] == "1"
 
+/// FretCodex fork — consumer-lite by default. SwiftPM fetches a dependency's package dependencies for every target
+/// reachable from any product the dependency DECLARES, whichever products the consumer links. Here that is Wirelet
+/// (+ swift-syntax, swift-java-jni-core) and SwiftySynth, reached only through the audio / edit-wire / pages /
+/// PDF-writer products and the render-previews executable. Those products are therefore declared only in the full
+/// shape: SWIFT_SHEET_MUSIC_DEV=1 (this repository's CI and local work) or any platform flag that implies it.
+/// Targets and package dependencies are untouched, so the full shape is upstream's manifest exactly.
+let declaresWireletProducts = ProcessInfo.processInfo.environment["SWIFT_SHEET_MUSIC_DEV"] == "1"
+    || isAndroid || isWasm || wantsWindowsProbes || isJNILibraryBuild
+
 /// `libSheetMusicAndroidJNI.so` exports only the `Java_*` entry points the JVM binds its `external fun`s to
 /// (`Scripts/android-jni-exports.map`). A dynamic library otherwise exports every public symbol of every module linked
 /// into it — 16,592 names in 4.4.0, of which the JVM looks up 73 — and carries their symbol tables, while nothing links
@@ -93,7 +102,6 @@ var products: [Product] = [
     // Android JNI libraries link it directly for exactly that reason.
     .library(name: "SheetMusicLoader", targets: ["SheetMusicLoader"]),
     .library(name: "SheetMusicLayout", targets: ["SheetMusicLayout"]),
-    .library(name: "SheetMusicAudioCore", targets: ["SheetMusicAudioCore"]),
     // Exported on Android too: the target's Android shape excludes every Apple-only file (the CGPDFScanner
     // walker, the PDFKit entry, PDF export, the SwiftUI views) and depends only on Core + Layout, so a
     // cross-compiling consumer can use the importer — `PDFImporter.parseUsingSwiftReader`,
@@ -113,13 +121,19 @@ var products: [Product] = [
     // replicate an edit — folino's cloud op log carries `EditIntent`s encoded by `EditIntentCodec`. While
     // the product was Android-gated, `SheetMusicEditWire` and `SheetMusicUI` could not resolve in one
     // evaluation of this manifest, so an iOS host could not link the wire at all.
-    .library(name: "SheetMusicEditWire", targets: ["SheetMusicEditWire"]),
-    // A score cut into pages for a host that draws or writes them (`ScorePages.compute`, its options, the page
-    // geometry). Portable: the Windows surface re-exports it, and a PDF writer reads the same pages.
-    .library(name: "SheetMusicPages", targets: ["SheetMusicPages"]),
-    // Writes those pages as a vector PDF with their fonts embedded, in Swift alone.
-    .library(name: "SheetMusicPDFWriter", targets: ["SheetMusicPDFWriter"]),
 ]
+// Each of these reaches Wirelet (see `declaresWireletProducts`); upstream's comments on them live in its manifest.
+if declaresWireletProducts {
+    products += [
+        .library(name: "SheetMusicAudioCore", targets: ["SheetMusicAudioCore"]),
+        .library(name: "SheetMusicEditWire", targets: ["SheetMusicEditWire"]),
+        // A score cut into pages for a host that draws or writes them (`ScorePages.compute`, its options, the page
+        // geometry). Portable: the Windows surface re-exports it, and a PDF writer reads the same pages.
+        .library(name: "SheetMusicPages", targets: ["SheetMusicPages"]),
+        // Writes those pages as a vector PDF with their fonts embedded, in Swift alone.
+        .library(name: "SheetMusicPDFWriter", targets: ["SheetMusicPDFWriter"]),
+    ]
+}
 
 var targets: [Target] = [
     .executableTarget(
@@ -496,16 +510,21 @@ if !isAppleFree {
     products += [
         .library(name: "SheetMusicLayoutApple", targets: ["SheetMusicLayoutApple"]),
         .library(name: "SheetMusicUI", targets: ["SheetMusicUI"]),
-        .library(name: "SheetMusicAudio", targets: ["SheetMusicAudio"]),
-        .library(name: "SheetMusicAudioApple", targets: ["SheetMusicAudioApple"]),
-        // Pure-Swift, MIT SoundFont2 playback backend (SwiftySynth). Works on
-        // iOS + macOS, App-Store clean — the default stealing-free synth.
-        .library(name: "SheetMusicAudioSwiftySynth", targets: ["SheetMusicAudioSwiftySynth"]),
         // Separately linkable so only a consumer that wants scanned-PDF reading carries
         // the model's ~1.1MB. SheetMusicPDF itself never depends on it.
         .library(name: "SheetMusicOMRModel", targets: ["SheetMusicOMRModel"]),
-        .executable(name: "render-previews", targets: ["RenderPreviews"]),
     ]
+    if declaresWireletProducts {
+        products += [
+            // RenderPreviews reaches Wirelet through SheetMusicBridgeCore.
+            .executable(name: "render-previews", targets: ["RenderPreviews"]),
+            .library(name: "SheetMusicAudio", targets: ["SheetMusicAudio"]),
+            .library(name: "SheetMusicAudioApple", targets: ["SheetMusicAudioApple"]),
+            // Pure-Swift, MIT SoundFont2 playback backend (SwiftySynth). Works on
+            // iOS + macOS, App-Store clean — the default stealing-free synth.
+            .library(name: "SheetMusicAudioSwiftySynth", targets: ["SheetMusicAudioSwiftySynth"]),
+        ]
+    }
     targets += [
         .target(
             name: "SheetMusicLayoutApple",
