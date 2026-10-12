@@ -13,7 +13,8 @@ This file is the working summary for whoever syncs the fork.
 |---|---|---|
 | **F0** | **Consumer-lite product gate.** The products that reach Wirelet or SwiftySynth (`SheetMusicAudioCore`, `SheetMusicEditWire`, `SheetMusicPages`, `SheetMusicPDFWriter`, `SheetMusicAudio`, `SheetMusicAudioApple`, `SheetMusicAudioSwiftySynth`) and the `render-previews` executable are declared only when `SWIFT_SHEET_MUSIC_DEV=1`, or when an upstream platform flag implies it. Targets and package dependencies are untouched. | `Package.swift` |
 | | The fork's notes and the F0 check script | `FRETCODEX.md`, `Scripts/fretcodex-check-consumer-lite.sh` |
-| F1 | *Not yet.* MusicXML tab import (`<technical>` string/fret, `<staff-tuning>`, the TAB clef, `<clef-octave-change>`, `<transpose>`). Only if FretCodex puts MusicXML in v1 scope. | `Sources/SheetMusicMusicXML/Decoders/` |
+| **F1** | **MusicXML tab and chart import.** A MusicXML part decodes into the `Score` an equivalent MSCX gives: `<technical><string>`/`<fret>` → `Note.string` (n − 1) / `Note.fret`; `<staff-tuning>` → `Instrument.stringData`; `<staff-details><capo>` → `.capo`; the TAB clef → a tablature staff; `<clef-octave-change>` → MuseScore's octave clefs; `<transpose>` → the instrument's transposition, with pitches and keys stored at concert pitch. For charts: `<sound tempo>` / `<metronome>` → `.tempo`; `<harmony>` → `.harmony`; `<ending>` → the volta `Spanner`; short or implicit bars → `Measure.actualLength` / `irregular`. Additive; MSCX untouched. See *Reading a MusicXML score* below. | `Sources/SheetMusicMusicXML/Decoders/` (`+Attributes`, `+Barline`, `+Harmony`, `+HarmonyKind`, `+Measure`, `+MeasureContent`, `+Note`, `+PartShape`, `+StaffDetails`, `+TabPosition`, `+Tempo`, `MusicXMLDecoder.swift`, `MusicXMLVoltaTracker.swift`, `StaffMeasureBuilder.swift`), `Sources/SheetMusicMusicXML/Internal/` (`MusicXMLTransposition`, `MusicXMLMeasureCursor`, `MusicXMLMeasureLength`, `MusicXMLHarmonyPlacement`, `PitchDecoder`) |
+| | F1's tests, on fixtures FretCodex owns | `Tests/SheetMusicTests/MusicXML/FretCodex*.swift` |
 
 **Why F0 exists.** SwiftPM fetches the package dependencies of every target reachable from
 **any product a package declares**, whichever products a consumer actually links. Upstream
@@ -33,6 +34,51 @@ that to zero.
   The manifest is then upstream's exactly, apart from product order.
 - **Without the flag**, the root still builds every target, but declares only the consumer
   products.
+- **Fork tests** live in `Tests/SheetMusicTests/MusicXML/FretCodex*.swift`, with fixtures
+  written inline and owned by FretCodex (`FretCodexFixtures.swift` records their provenance).
+- `Scripts/fretcodex-check-consumer-lite.sh` names the package `swift-sheet-music`, which SwiftPM
+  takes from the checkout's directory name. Run it from a checkout (or a symlink to one) with
+  that name.
+
+## Reading a MusicXML score (after F1)
+
+F1's tests are `FretCodexMusicXMLTabTests`, `FretCodexMusicXMLTabStaffTests`,
+`FretCodexMusicXMLTransposeTests` and `FretCodexMusicXMLChartTests`; the last covers tempo,
+chord symbols, endings and pickups.
+
+- **Pitch is concert (sounding) in both formats.** `Note.pitch` / `Note.tpc` sound. A
+  transposing part says so in `Instrument.transposeDiatonic` / `transposeChromatic` (guitar
+  −7 / −12); key signatures are concert keys. `Score.writtenPitchView()` gives the written page.
+  The instrument carries the *opening* `<transpose>`; a later one still converts the notes after
+  it, but is not modeled on the instrument. A `<transpose number="…">` applies to the whole part.
+- **Strings.** `Note.string` 0 is the **highest** string (MusicXML `<string>` n is n − 1).
+  `StringData.strings` is listed low → high, so string `s` is tuned to `strings[count − 1 − s]`.
+  A flat-spelled tuning has `useFlat`. A MusicXML tuning has 25 frets (MusicXML has no fret
+  count) and its pitches as `<staff-tuning>` spells them, with no `<transpose>` applied —
+  MuseScore's exporter writes them sounding, as MSCX stores them.
+  `<fret>` / `<string>` are read on any staff that gives them; most files give them only on the
+  tab staff, whereas an MSCX standard staff linked to a tab carries them too.
+- **Tab staves.** Test `Staff.group == "tablature"` in both formats. `staffType` is
+  `tab<N>StrCommon` (`tab6StrCommon` outside 4…10 lines) and there is no
+  `staffTypePreservedMarkup`: read the preset's defaults. The `"TAB"` clef is an opening
+  `.clef` element in MusicXML and `Staff.defaultClefType` in MSCX; `NotatedClef` reads it as a
+  treble either way.
+- **Pairing a tab staff with its pitched staff.** MSCX: the tab staff's `Staff.preservedMarkup`
+  holds `<linkedTo>` (an index or an EID). MusicXML has no such markup and F1 invents none:
+  pair the `tablature` staff with the pitched staff **of the same part** (MusicXML's usual
+  guitar form, `<staves>2</staves>`), chord by chord by measure and position. A file that
+  writes standard and tab as two parts has no structural link; pairing those is the consumer's
+  heuristic (adjacent parts, same instrument or part name).
+- **Capo.** `<staff-details><capo>` is a `.capo` element on the staff that carried it.
+  MusicXML defines the capo as raising the open strings, so the decoder leaves pitches alone and
+  `tuning + capo + fret == pitch`. An MSCX `<pitch>` is the capo *shape*: `tuning + fret ==
+  pitch` and it sounds `pitch + capo`. Branch on `Score.source == .musicXML`.
+- **Charts.** A tempo is a `.tempo` system element at its time in the bar, quarter-normalised,
+  one per position across parts. A chord symbol is a `.harmony` voice element before the chord
+  at its time (or wrapped in a balanced `.locationShift` pair between onsets), `name` being the
+  suffix only (`""`, `"m7"`, `"7"`, `"maj7"`). An ending is a volta `Spanner` on the part's first
+  staff, begin side only. A bar whose content differs from its time signature has
+  `actualLength`; `implicit="yes"` sets `irregular`. Both are set on every staff.
 
 ## Must not change
 
@@ -62,7 +108,7 @@ milestone. Take the newest upstream tag at that point.
 
 **Check on every sync:**
 - the products in `Package.swift`;
-- `Sources/SheetMusicMusicXML/Decoders`;
+- `Sources/SheetMusicMusicXML/Decoders` and `Internal` (F1);
 - `NotatedClef`;
 - `ScoreView`'s initialiser and `playbackCursor`;
 - `PDFImportOptions` and the OMR types;
