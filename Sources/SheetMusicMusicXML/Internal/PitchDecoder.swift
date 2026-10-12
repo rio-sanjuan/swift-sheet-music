@@ -73,6 +73,12 @@ enum PitchDecoder {
         stepSemitones[step].map { (octave + 1) * 12 + $0 + alter }
     }
 
+    /// Tonal pitch class of a `step` / `alter` pair (`<root-step>` / `<root-alter>`, `<bass-step>` /
+    /// `<bass-alter>`). `nil` for an unknown step.
+    static func tpc(step: String, alter: Int) -> Int? {
+        stepTpc[step].map { $0 + alter * 7 }
+    }
+
     /// Semitone offset inside the octave (C=0).
     private static let stepSemitones: [String: Int] = [
         "C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11,

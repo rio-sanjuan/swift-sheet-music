@@ -7,7 +7,9 @@ import SheetMusicXMLTools
 ///   end-of-measure styled barlines),
 /// - start-repeat / end-repeat flags on the enclosing `Measure`, or
 /// - no-op for plain regular barlines that MuseScore treats as implicit
-///   measure boundaries.
+///   measure boundaries,
+/// plus the `<ending>` (volta bracket) edge the barline carries, which
+/// `MusicXMLVoltaTracker` pairs across measures.
 enum MusicXMLBarlineDecoder {
     struct Decoded {
         enum Placement { case start, middle, end }
@@ -15,6 +17,15 @@ enum MusicXMLBarlineDecoder {
         let inline: BarLine?
         let startRepeat: Bool
         let endRepeatCount: Int?
+        let ending: Ending?
+    }
+
+    /// `<ending number="…" type="start|stop|discontinue">text</ending>`, raw.
+    struct Ending {
+        let number: String
+        let type: String
+        let text: String
+        let printObject: Bool
     }
 
     static func decode(_ node: XMLTreeNode) -> Decoded {
@@ -49,6 +60,14 @@ enum MusicXMLBarlineDecoder {
             inline: inline,
             startRepeat: startRepeat,
             endRepeatCount: endRepeatCount,
+            ending: node.first("ending").map { ending in
+                Ending(
+                    number: ending.attributes["number"] ?? "",
+                    type: ending.attributes["type"] ?? "",
+                    text: ending.text,
+                    printObject: ending.attributes["print-object"] != "no",
+                )
+            },
         )
     }
 

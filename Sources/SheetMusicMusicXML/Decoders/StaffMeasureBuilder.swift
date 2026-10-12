@@ -17,13 +17,16 @@ struct StaffMeasureBuilder {
     private var trailingBarline: BarLine?
     private var markers: [Marker] = []
     private var jumps: [Jump] = []
-    /// System-level elements lifted out during decode (currently
-    /// just rehearsal marks; tempo / staff text / swing imports
-    /// would feed into this once added). The caller pulls these
+    /// System-level elements lifted out during decode (rehearsal marks
+    /// and tempo changes; staff text / swing imports would feed into
+    /// this once added). The caller pulls these
     /// out via `build()` and merges them into `Score.systemMeasures`.
     /// `originalStaff` is left nil here and stamped by the caller
     /// once the staff address is known.
     private var systemElements: [PositionedSystemElement] = []
+    /// Chord symbols with their time in the measure, placed into the
+    /// first voice by `build(measureLength:)`.
+    private var harmonies: [(position: Fraction, harmony: Harmony)] = []
 
     /// Result of `build()`: the decoded `Measure` and the system
     /// elements that should be merged into the score-level
@@ -50,6 +53,21 @@ struct StaffMeasureBuilder {
             position: .start,
             element: .rehearsalMark(mark),
         ))
+    }
+
+    /// Record a tempo change at `position` (a fraction of a whole note
+    /// from the downbeat).
+    mutating func addTempo(_ tempo: Tempo, at position: Fraction) {
+        systemElements.append(PositionedSystemElement(
+            position: MeasurePosition(offset: position),
+            element: .tempo(tempo),
+        ))
+    }
+
+    /// Record a chord symbol at `position`; `build(measureLength:)` puts
+    /// it in the first voice before the chord that starts there.
+    mutating func addHarmony(_ harmony: Harmony, at position: Fraction) {
+        harmonies.append((position, harmony))
     }
 
     /// Append to the first voice index (MSCX attributes convention). Lazily
@@ -120,8 +138,16 @@ struct StaffMeasureBuilder {
         }
     }
 
-    func build() -> Built {
+    /// `measureLength` is the time signature in force; it resolves
+    /// `.measure` rests when chord symbols are placed by time.
+    func build(measureLength: Fraction = Fraction(numerator: 1, denominator: 1)) -> Built {
         var final = voices
+        if !harmonies.isEmpty {
+            if final.isEmpty { final.append([]) }
+            final[0] = MusicXMLHarmonyPlacement.inserting(
+                harmonies, into: final[0], measureLength: measureLength,
+            )
+        }
         if let trailing = trailingBarline {
             if final.isEmpty {
                 final.append([])

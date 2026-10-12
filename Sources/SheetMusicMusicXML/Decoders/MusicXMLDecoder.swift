@@ -126,8 +126,9 @@ extension Score {
         // the end so every staff's contribution lands at the right
         // measure index with originalStaff stamped.
         var perStaffSystemElements: [(address: StaffAddress, perMeasure: [[PositionedSystemElement]])] = []
+        var measureFactsByPart: [[MusicXMLMeasureFacts]] = []
         for (index, partNode) in root.all("part").enumerated() {
-            let (part, staffElements) = try decodeOnePart(
+            let (part, staffElements, measureFacts) = try decodeOnePart(
                 partNode: partNode,
                 scoreParts: scoreParts,
                 index: index,
@@ -135,7 +136,9 @@ extension Score {
             )
             parts.append(part)
             perStaffSystemElements.append(contentsOf: staffElements)
+            measureFactsByPart.append(measureFacts)
         }
+        parts = sizingMeasures(parts, by: MusicXMLMeasureLength.resolve(measureFactsByPart))
         let measureCount = perStaffSystemElements
             .map(\.perMeasure.count)
             .max() ?? 0
@@ -147,6 +150,14 @@ extension Score {
             for (measureIndex, elements) in entry.perMeasure.enumerated() {
                 guard measureIndex < laneElements.count else { continue }
                 for var element in elements {
+                    // One tempo per position, the first part's: MuseScore's `canAddTempoText` adds a tempo only
+                    // where the tempo map has none yet, and exporters commonly repeat `<sound tempo>` in every part.
+                    if case .tempo = element.element,
+                       laneElements[measureIndex].contains(where: { other in
+                           if case .tempo = other.element { return other.position == element.position }
+                           return false
+                       })
+                    { continue }
                     element.originalStaff = entry.address
                     laneElements[measureIndex].append(element)
                 }
@@ -170,7 +181,11 @@ extension Score {
         scoreParts: [XMLTreeNode],
         index: Int,
         partIndex: Int,
-    ) throws -> (part: Part, staffElements: [(address: StaffAddress, perMeasure: [[PositionedSystemElement]])]) {
+    ) throws -> (
+        part: Part,
+        staffElements: [(address: StaffAddress, perMeasure: [[PositionedSystemElement]])],
+        measureFacts: [MusicXMLMeasureFacts],
+    ) {
         let id = partNode.attributes["id"] ?? ""
         guard let scorePart = scoreParts.first(where: { $0.attributes["id"] == id })
             ?? (index < scoreParts.count ? scoreParts[index] : nil)
@@ -236,6 +251,6 @@ extension Score {
             StaffAddress(partIndex: partIndex, staffIndexInPart: 0),
             instrumentChangesByMeasure,
         ))
-        return (part, staffElements)
+        return (part, staffElements, walker.measureFacts)
     }
 }
