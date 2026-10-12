@@ -9,9 +9,9 @@ extension MusicXMLNoteDecoder {
     ///
     /// Two departures from that table: `detached-legato` is the one louré (`.tenutoStaccato`) rather than the tenuto
     /// plus staccato MuseScore 4 splits it into, and only the marks `ChordArticulation.Kind` models are read —
-    /// `thumb-position`, the tonguings, the brass bends and the handbell marks stay unread, as does everything else
-    /// under `<technical>` (fingering, string, fret). A `harmonic` is the string harmonic unless it is `artificial`,
-    /// which MuseScore drops too (`harmonic()`).
+    /// `thumb-position`, the tonguings, the brass bends and the handbell marks stay unread, as does `<fingering>`;
+    /// `<string>` and `<fret>` are the note's tab position, read by `decodeTabPosition(_:)`. A `harmonic` is the
+    /// string harmonic unless it is `artificial`, which MuseScore drops too (`harmonic()`).
     static func decodeArticulations(_ node: XMLTreeNode) -> [ChordArticulation] {
         guard let notations = node.first("notations") else { return [] }
         var result: [ChordArticulation] = []

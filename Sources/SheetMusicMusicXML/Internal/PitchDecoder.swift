@@ -67,6 +67,12 @@ enum PitchDecoder {
         return (midi, tpc)
     }
 
+    /// MIDI pitch of a `step` / `alter` / `octave` triple — the arithmetic `decode(_:)` applies to `<pitch>`, for
+    /// the other elements that spell a pitch the same way (`<staff-tuning>`). `nil` for an unknown step.
+    static func midi(step: String, alter: Int, octave: Int) -> Int? {
+        stepSemitones[step].map { (octave + 1) * 12 + $0 + alter }
+    }
+
     /// Semitone offset inside the octave (C=0).
     private static let stepSemitones: [String: Int] = [
         "C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11,

@@ -31,6 +31,12 @@ enum AttributesDecoder {
         }
 
         decodeStaffLines(node, previous: &previous, staffCount: staffCount)
+        // `<transpose>` follows `<key>` in MusicXML's element order but governs it, so it is read first. The first one
+        // in a block wins and its `number` (per-staff) attribute is not honoured — MuseScore's
+        // `MusicXmlParserPass1::transpose` keeps one interval per part per tick the same way.
+        if let transpose = node.first("transpose") {
+            previous.transposition = MusicXMLTransposition.decode(transpose)
+        }
 
         var output: [Emission] = []
         output.append(contentsOf: decodeClefs(
@@ -42,19 +48,24 @@ enum AttributesDecoder {
 
         if let fifths = decodeKeyFifths(node) {
             let changed = fifths != previous.keyFifths
+            // `<fifths>` is the WRITTEN key; the model stores the concert one (identical on a part that does not
+            // transpose).
+            let concertKey = previous.transposition.concertKey(writtenFifths: fifths)
             // MuseScore's `.mscx` exporter omits `<KeySig>` for C major
             // (fifths = 0) when it hasn't changed, treating it as the
-            // implicit default. Match that for semantic parity.
+            // implicit default. Match that for semantic parity — on a
+            // transposing part only when BOTH the written and the concert
+            // key are C, as `MSCXEncoder` does.
             let shouldEmit: Bool
             if isFirstMeasure {
-                shouldEmit = fifths != 0
+                shouldEmit = fifths != 0 || concertKey != 0
             } else {
                 shouldEmit = changed
             }
             if shouldEmit {
                 output.append(Emission(
                     staffIndex: nil,
-                    element: .keySignature(KeySignature(concertKey: fifths)),
+                    element: .keySignature(KeySignature(concertKey: concertKey)),
                 ))
             }
             previous.keyFifths = fifths
@@ -77,6 +88,9 @@ enum AttributesDecoder {
             }
         }
 
+        output.append(contentsOf: MusicXMLStaffDetailsDecoder.decode(
+            node, previous: &previous, staffCount: staffCount,
+        ))
         return output
     }
 
@@ -94,11 +108,17 @@ enum AttributesDecoder {
         for clefNode in node.all("clef") {
             let sign = clefNode.first("sign")?.text ?? ""
             let line = clefNode.first("line")?.text ?? ""
-            guard let concert = musicXMLClefToMuseScore(sign: sign, line: line) else {
+            let octaveChange = clefNode.first("clef-octave-change").flatMap { Int($0.text) } ?? 0
+            guard let concert = musicXMLClefToMuseScore(sign: sign, line: line, octaveChange: octaveChange) else {
                 continue
             }
             let number = clefNode.attributes["number"].flatMap { Int($0) } ?? 1
             let staffIndex = max(0, min(staffCount - 1, number - 1))
+            // A TAB clef at the start makes the staff a tablature staff. Like MuseScore (`MusicXmlParserPass2::clef`
+            // only changes the staff type at tick 0), a later TAB clef is a clef change and nothing more.
+            if isFirstMeasure, concert == "TAB" {
+                previous.tabStaves.insert(staffIndex)
+            }
             let prior = previous.clefByStaff[staffIndex]
             if isFirstMeasure || prior != concert {
                 // One clef for both views — MuseScore's MusicXML import sets both types alike, which the model
@@ -178,6 +198,36 @@ enum AttributesDecoder {
         }
     }
 
+    /// Map MusicXML `<sign>` / `<line>` / `<clef-octave-change>` to MuseScore's `concertClefType` value.
+    ///
+    /// `TAB` is MuseScore's tablature clef whatever its line (`NotatedClef` reads it as a treble; the staff's `group`
+    /// says tablature). An octave change names MuseScore's octave clef — `G8vb` for a guitar's treble-8vb, the same
+    /// string the MSCX side carries — for the combinations MuseScore's importer knows (G on line 2 and F on line 4,
+    /// ±1 and ±2 octaves; C on line 4, −1). Any other octave change is ignored and the plain clef kept.
+    private static func musicXMLClefToMuseScore(sign: String, line: String, octaveChange: Int) -> String? {
+        if sign == "TAB" { return "TAB" }
+        if octaveChange != 0, let octaveClef = octaveClef(sign: sign, line: line, octaveChange: octaveChange) {
+            return octaveClef
+        }
+        return musicXMLClefToMuseScore(sign: sign, line: line)
+    }
+
+    /// MuseScore's octave clefs (`ClefType::G8_VB` … in `MusicXmlParserPass2::clef`), spelled as its MSCX names them.
+    private static func octaveClef(sign: String, line: String, octaveChange: Int) -> String? {
+        switch (sign, line, octaveChange) {
+        case ("G", "2", 1): "G8va"
+        case ("G", "2", 2): "G15ma"
+        case ("G", "2", -1): "G8vb"
+        case ("G", "2", -2): "G15mb"
+        case ("F", "4", 1): "F8va"
+        case ("F", "4", 2): "F15ma"
+        case ("F", "4", -1): "F8vb"
+        case ("F", "4", -2): "F15mb"
+        case ("C", "4", -1): "C4_8VB"
+        default: nil
+        }
+    }
+
     /// Map MusicXML `<sign>`/`<line>` to MuseScore's `concertClefType` value.
     private static func musicXMLClefToMuseScore(sign: String, line: String) -> String? {
         switch (sign, line) {
@@ -214,4 +264,12 @@ struct MusicXMLAttributesSnapshot {
     var timeN: Int?
     var timeD: Int?
     var timeSymbol: TimeSignatureSymbol?
+    /// The part's `<transpose>` in force; `.none` until one is read.
+    var transposition: MusicXMLTransposition = .none
+    /// Staves whose opening clef is `TAB` — the part decoder makes them tablature staves.
+    var tabStaves: Set<Int> = []
+    /// The FIRST `<staff-tuning>` set read for each staff (see `MusicXMLStaffDetailsDecoder`).
+    var stringDataByStaff: [Int: StringData] = [:]
+    /// The `<staff-details><capo>` last emitted per staff, so a restated capo is not emitted twice.
+    var capoByStaff: [Int: Int] = [:]
 }

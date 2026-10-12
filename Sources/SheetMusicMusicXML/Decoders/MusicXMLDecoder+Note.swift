@@ -22,11 +22,15 @@ enum MusicXMLNoteDecoder {
         case foldIntoLastChord(Note, NoteDuration, trailingBreaths: [Breath], articulations: [ChordArticulation])
     }
 
+    /// `transposition` is the part's `<transpose>` in force at this note: a `<pitch>` is WRITTEN pitch, and the note
+    /// is stored at the concert pitch MuseScore stores (see `MusicXMLTransposition`). `<unpitched>` notes are left
+    /// alone.
     static func decodeNote(
         node: XMLTreeNode,
         divisions: DivisionsContext,
         existingVoiceElements: [VoiceElement],
         drumTable: MusicXMLDrumTable = MusicXMLDrumTable(),
+        transposition: MusicXMLTransposition = .none,
     ) throws -> Decoded {
         let isRest = node.children.contains(where: { $0.name == "rest" })
         let isChord = node.children.contains(where: { $0.name == "chord" })
@@ -52,28 +56,11 @@ enum MusicXMLNoteDecoder {
             return .new(prefix + [.rest(duration: duration)] + suffix)
         }
 
-        let midi: Int
-        let tpc: Int
-        if let pitchNode = node.first("pitch") {
-            (midi, tpc) = try PitchDecoder.decode(pitchNode)
-        } else if let unpitchedNode = node.first("unpitched") {
-            // Unpitched percussion: prefer the part's drum table (built from
-            // <score-part>'s <midi-instrument><midi-unpitched>) so the note
-            // plays the GM percussion pitch the composer intended. Fall back
-            // to the staff-position display pitch if no mapping is registered.
-            let instrumentRef = node.first("instrument")?.attributes["id"]
-            if let id = instrumentRef, let drumPitch = drumTable.pitchByInstrumentId[id] {
-                midi = drumPitch
-                tpc = 14 // unpitched notes have no tonal-pitch meaning
-            } else {
-                (midi, tpc) = try PitchDecoder.decodeUnpitched(unpitchedNode)
-            }
-        } else {
-            throw missingNoteBody()
-        }
+        let (midi, tpc) = try decodePitch(node, drumTable: drumTable, transposition: transposition)
         let accidental = decodeAccidental(node)
         let (tieForward, tieBack) = decodeTies(node)
         let parentheses = decodeNoteheadParentheses(node)
+        let tabPosition = decodeTabPosition(node)
         let note = Note(
             pitch: midi,
             tpc: tpc,
@@ -82,6 +69,8 @@ enum MusicXMLNoteDecoder {
             tieBack: tieBack,
             parentheses: parentheses,
             userVelocity: decodeUserVelocity(node),
+            fret: tabPosition.fret,
+            string: tabPosition.string,
         )
 
         let articulations = decodeArticulations(node)
@@ -97,6 +86,31 @@ enum MusicXMLNoteDecoder {
         )
         _ = existingVoiceElements // reserved for future use (e.g. tie backrefs)
         return .new(prefix + [.chord(chord)] + suffix)
+    }
+
+    /// The stored `(midi, tpc)` of a pitched or unpitched `<note>`. A `<pitch>` is written pitch and moves to concert
+    /// by `transposition`; an `<unpitched>` note is a staff position or a drum-table pitch and does not.
+    private static func decodePitch(
+        _ node: XMLTreeNode,
+        drumTable: MusicXMLDrumTable,
+        transposition: MusicXMLTransposition,
+    ) throws -> (midi: Int, tpc: Int) {
+        if let pitchNode = node.first("pitch") {
+            let written = try PitchDecoder.decode(pitchNode)
+            return transposition.sounding(midi: written.midi, tpc: written.tpc)
+        }
+        guard let unpitchedNode = node.first("unpitched") else {
+            throw missingNoteBody()
+        }
+        // Unpitched percussion: prefer the part's drum table (built from
+        // <score-part>'s <midi-instrument><midi-unpitched>) so the note
+        // plays the GM percussion pitch the composer intended. Fall back
+        // to the staff-position display pitch if no mapping is registered.
+        let instrumentRef = node.first("instrument")?.attributes["id"]
+        if let id = instrumentRef, let drumPitch = drumTable.pitchByInstrumentId[id] {
+            return (drumPitch, 14) // unpitched notes have no tonal-pitch meaning
+        }
+        return try PitchDecoder.decodeUnpitched(unpitchedNode)
     }
 
     /// Decode `<note dynamics="…">` into an absolute per-note MIDI

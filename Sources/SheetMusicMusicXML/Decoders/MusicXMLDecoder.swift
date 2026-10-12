@@ -203,16 +203,19 @@ extension Score {
         let populatedStaves: [Staff] = walker.measuresByStaff
             .enumerated()
             .map { staffIndex, staffMeasures in
-                Staff(
-                    staffType: "stdNormal", group: "pitched",
-                    lineCount: walker.lineCountByStaff[staffIndex] ?? 5,
+                let lineCount = walker.lineCountByStaff[staffIndex] ?? 5
+                let isTab = walker.tabStaves.contains(staffIndex)
+                return Staff(
+                    staffType: isTab ? tabStaffType(lineCount: lineCount) : "stdNormal",
+                    group: isTab ? "tablature" : "pitched",
+                    lineCount: lineCount,
                     defaultClefType: nil, measures: staffMeasures,
                 )
             }
         let part = Part(
             id: partTemplate.id,
             trackName: partTemplate.trackName,
-            instrument: partTemplate.instrument,
+            instrument: withPartAttributes(partTemplate.instrument, from: walker),
             staves: IdentifiedArray(populatedStaves),
         )
         var staffElements: [(address: StaffAddress, perMeasure: [[PositionedSystemElement]])] = []
@@ -226,7 +229,7 @@ extension Score {
         // system-flagged elements already land.
         let instrumentChangesByMeasure = MusicXMLInstrumentChangeDecoder.decode(
             partNode: partNode,
-            instrumentByID: instrumentByID,
+            instrumentByID: instrumentByID.mapValues { withPartAttributes($0, from: walker) },
             seedInstrumentID: scorePart.first("score-instrument")?.attributes["id"],
         )
         staffElements.append((

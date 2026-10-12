@@ -29,6 +29,17 @@ enum MusicXMLMeasureWalker {
         /// into the measure stream. Staves absent from the map keep
         /// `Staff.lineCount`'s default of 5.
         let lineCountByStaff: [Int: Int]
+        /// Staves whose opening clef is `TAB`: the part decoder makes them
+        /// tablature staves.
+        let tabStaves: Set<Int>
+        /// The part's tuning: the first `<staff-tuning>` set on a TAB
+        /// staff, else on any staff (`MusicXMLStaffDetailsDecoder`).
+        let stringData: StringData?
+        /// The `<transpose>` in force at the end of the first measure —
+        /// the instrument's transposition, as MuseScore takes the one at
+        /// tick 0. Pitches are converted with whichever is in force at
+        /// each note.
+        let transposition: MusicXMLTransposition
     }
 
     static func decode(
@@ -50,6 +61,7 @@ enum MusicXMLMeasureWalker {
         // strictly per-part — no cross-part state leaks because the
         // tracker is a fresh local here.
         var glideTracker = MusicXMLGlideTracker()
+        var initialTransposition = MusicXMLTransposition.none
         for (index, measureNode) in partNode.all("measure").enumerated() {
             let isFirstMeasure = (index == 0)
             let built = try decodeOne(
@@ -66,6 +78,7 @@ enum MusicXMLMeasureWalker {
                 perStaffMeasures[staffIdx].append(item.measure)
                 perStaffSystemElements[staffIdx].append(item.systemElements)
             }
+            if isFirstMeasure { initialTransposition = previousAttributes.transposition }
         }
         let withGlides = applyGlides(
             attachments: glideTracker.attachments,
@@ -77,7 +90,20 @@ enum MusicXMLMeasureWalker {
             measuresByStaff: dropped,
             systemElementsByStaffMeasure: perStaffSystemElements,
             lineCountByStaff: previousAttributes.lineCountByStaff,
+            tabStaves: previousAttributes.tabStaves,
+            stringData: preferredStringData(previousAttributes),
+            transposition: initialTransposition,
         )
+    }
+
+    /// A part has one tuning (`Instrument.stringData`). A TAB staff's is
+    /// preferred — MuseScore reads `<staff-tuning>` for TAB staves only —
+    /// but a tuning given on a standard staff is kept rather than dropped
+    /// when there is no TAB staff's to prefer. Lowest staff first.
+    private static func preferredStringData(_ attributes: MusicXMLAttributesSnapshot) -> StringData? {
+        let staves = attributes.stringDataByStaff.keys.sorted()
+        let staff = staves.first { attributes.tabStaves.contains($0) } ?? staves.first
+        return staff.flatMap { attributes.stringDataByStaff[$0] }
     }
 
     /// Mutate the start chord's first note for each resolved glissando /
@@ -182,6 +208,7 @@ enum MusicXMLMeasureWalker {
                     divisions: divisions,
                     existingVoiceElements: existing,
                     drumTable: drumTable,
+                    transposition: previousAttributes.transposition,
                 )
                 switch decoded {
                 case let .foldIntoLastChord(note, duration, trailingBreaths, articulations):
