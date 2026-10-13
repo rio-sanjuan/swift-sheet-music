@@ -3,10 +3,11 @@ import Foundation
 @testable import SheetMusicMSCX
 @testable import SheetMusicMusicXML
 
-/// Builders and readers for the FretCodex fork's MusicXML tests (delta F1, `FRETCODEX.md`).
+/// Builders and readers for the FretCodex fork's tests (deltas F1 and F2, `FRETCODEX.md`).
 ///
-/// **Provenance.** Every MusicXML and MSCX snippet in the `FretCodex*Tests` files is authored for this fork and owned
-/// by FretCodex. None is copied or derived from `Tests/SheetMusicTests/Resources/` (MuseScore's GPL-3.0 fixtures).
+/// **Provenance.** Every MusicXML and MSCX snippet in the `FretCodex*Tests` files — under `MusicXML/` and `MSCX/` —
+/// is authored for this fork and owned by FretCodex. None is copied or derived from `Tests/SheetMusicTests/Resources/`
+/// (MuseScore's GPL-3.0 fixtures).
 enum FretCodexFixtures {
     /// A `<score-partwise>` document of the given `<score-part>` / `<part>` pairs.
     static func document(_ parts: [(id: String, name: String, measures: String)]) -> String {
