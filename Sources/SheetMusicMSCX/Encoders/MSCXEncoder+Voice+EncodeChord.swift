@@ -33,6 +33,12 @@ extension Voice {
         // silently dropped here the way an explicit-list rebuild once was.
         var unscaledChord = chord
         unscaledChord.duration = try unscaledDuration(chord.duration, in: activeTuplets)
+        // A `<Rest>` can fall back to `measure` + `<duration>`; a `<Chord>`
+        // cannot, and one written that way makes the file unreadable — so
+        // refuse here, before anything is written.
+        if !unscaledChord.notes.isEmpty {
+            try unscaledChord.duration.requireChordSpelling(location: "chord")
+        }
         let tieForward = forwardTieLocation(
             chord: chord,
             isLastChordOfVoice: isLastChordOfVoice,

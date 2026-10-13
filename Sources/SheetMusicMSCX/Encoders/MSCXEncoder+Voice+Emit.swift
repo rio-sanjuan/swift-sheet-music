@@ -20,6 +20,10 @@ extension Voice {
     /// neighbour-chord delta — the grace shares the parent's tick, so
     /// the two are the same value. The unguarded `…Delta` forms are
     /// used because the parent chord itself need not carry any tie.
+    ///
+    /// A grace is a `<Chord>`, so its duration must be a note value MSCX can
+    /// spell (`NoteDuration.requireChordSpelling`); every grace is checked
+    /// before the first is written.
     private func emitGraceChords(
         of chord: Chord,
         isLastChord: Bool,
@@ -27,9 +31,12 @@ extension Voice {
         carryIn: VoiceTieCarry,
         state: inout EncodeState,
         options: MSCXEncoderOptions,
-    ) {
+    ) throws {
         guard !(chord.graceNotesBefore.isEmpty && chord.graceNotesAfter.isEmpty)
         else { return }
+        for grace in chord.graceNotesBefore.values + chord.graceNotesAfter.values {
+            try grace.duration.requireChordSpelling(location: "grace chord")
+        }
         let forwardDelta = forwardTieDelta(
             chord: chord,
             isLastChordOfVoice: isLastChord,
@@ -134,7 +141,7 @@ extension Voice {
             }
         }
         if case let .chord(chord) = element {
-            emitGraceChords(
+            try emitGraceChords(
                 of: chord,
                 isLastChord: isLastChord,
                 voiceBarLength: voiceBarLength,
