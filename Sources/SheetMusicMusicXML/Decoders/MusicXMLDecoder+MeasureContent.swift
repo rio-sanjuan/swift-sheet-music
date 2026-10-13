@@ -63,6 +63,11 @@ extension MusicXMLMeasureWalker {
             for element in elements {
                 perStaff[staffIdx].append(element, toVoice: voice)
             }
+        case let .grace(grace):
+            // No voice element of its own, so nothing for a glissando to
+            // be recorded against.
+            perStaff[staffIdx].appendGrace(grace, toVoice: voice)
+            return
         }
         // Glissando / slide events on this note: record the
         // chord's voice + index now (after append) so the

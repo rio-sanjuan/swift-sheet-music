@@ -27,6 +27,9 @@ struct StaffMeasureBuilder {
     /// Chord symbols with their time in the measure, placed into the
     /// first voice by `build(measureLength:)`.
     private var harmonies: [(position: Fraction, harmony: Harmony)] = []
+    /// Grace notes waiting for the chord they belong to, per MusicXML
+    /// voice id. They are never voice elements, so they take no time.
+    private var graceRuns: [String: MusicXMLGraceRun] = [:]
 
     /// Result of `build()`: the decoded `Measure` and the system
     /// elements that should be merged into the score-level
@@ -82,10 +85,29 @@ struct StaffMeasureBuilder {
     }
 
     /// Append a note-sourced element under the MSCX index corresponding to
-    /// this MusicXML voice id.
+    /// this MusicXML voice id. An ordinary chord takes the voice's waiting
+    /// grace notes (`MusicXMLGraceRun`); a rest leaves them waiting.
     mutating func append(_ element: VoiceElement, toVoice voiceId: String) {
         let idx = internVoice(voiceId)
+        if case var .chord(chord) = element, !chord.notes.isEmpty,
+           var run = graceRuns.removeValue(forKey: voiceId), !run.isEmpty
+        {
+            run.attach(to: &chord, previousIn: &voices[idx])
+            voices[idx].append(.chord(chord))
+            return
+        }
         voices[idx].append(element)
+    }
+
+    /// Hold a grace note for the next chord of its voice. A fermata on it
+    /// goes into the voice now, ahead of that chord — MuseScore moves a
+    /// grace's fermata onto its principal chord's segment.
+    mutating func appendGrace(_ grace: MusicXMLNoteDecoder.Grace, toVoice voiceId: String) {
+        let idx = internVoice(voiceId)
+        graceRuns[voiceId, default: MusicXMLGraceRun()].add(grace)
+        if let fermata = grace.fermata {
+            voices[idx].append(.fermata(fermata))
+        }
     }
 
     func elements(forVoice voiceId: String) -> [VoiceElement] {
@@ -142,6 +164,12 @@ struct StaffMeasureBuilder {
     /// `.measure` rests when chord symbols are placed by time.
     func build(measureLength: Fraction = Fraction(numerator: 1, denominator: 1)) -> Built {
         var final = voices
+        // Graces with no chord after them in the bar go after its last one.
+        for (voiceId, run) in graceRuns.sorted(by: { $0.key < $1.key }) {
+            guard let idx = voiceIndex[voiceId] else { continue }
+            var run = run
+            run.flush(into: &final[idx])
+        }
         if !harmonies.isEmpty {
             if final.isEmpty { final.append([]) }
             final[0] = MusicXMLHarmonyPlacement.inserting(

@@ -20,6 +20,9 @@ enum MusicXMLNoteDecoder {
         /// since the host chord remains the previous one, and the note's
         /// articulations join the host chord's.
         case foldIntoLastChord(Note, NoteDuration, trailingBreaths: [Breath], articulations: [ChordArticulation])
+        /// A `<grace>` note: no voice element of its own, it waits for the
+        /// chord it decorates (`MusicXMLGraceRun`).
+        case grace(Grace)
     }
 
     /// `transposition` is the part's `<transpose>` in force at this note: a `<pitch>` is WRITTEN pitch, and the note
@@ -34,6 +37,14 @@ enum MusicXMLNoteDecoder {
     ) throws -> Decoded {
         let isRest = node.children.contains(where: { $0.name == "rest" })
         let isChord = node.children.contains(where: { $0.name == "chord" })
+
+        if node.children.contains(where: { $0.name == "grace" }) {
+            // A grace rest means nothing; MuseScore ignores one too ("ignoring grace rest").
+            if isRest { return .new([]) }
+            return try .grace(decodeGrace(
+                node, isChordTone: isChord, drumTable: drumTable, transposition: transposition,
+            ))
+        }
 
         guard let duration = MusicXMLDuration.decode(note: node, divisions: divisions) else {
             throw missingUsableDuration()
@@ -56,22 +67,7 @@ enum MusicXMLNoteDecoder {
             return .new(prefix + [.rest(duration: duration)] + suffix)
         }
 
-        let (midi, tpc) = try decodePitch(node, drumTable: drumTable, transposition: transposition)
-        let accidental = decodeAccidental(node)
-        let (tieForward, tieBack) = decodeTies(node)
-        let parentheses = decodeNoteheadParentheses(node)
-        let tabPosition = decodeTabPosition(node)
-        let note = Note(
-            pitch: midi,
-            tpc: tpc,
-            accidental: accidental,
-            tieForward: tieForward,
-            tieBack: tieBack,
-            parentheses: parentheses,
-            userVelocity: decodeUserVelocity(node),
-            fret: tabPosition.fret,
-            string: tabPosition.string,
-        )
+        let note = try decodePitchedNote(node, drumTable: drumTable, transposition: transposition)
 
         let articulations = decodeArticulations(node)
         if isChord {
@@ -86,6 +82,28 @@ enum MusicXMLNoteDecoder {
         )
         _ = existingVoiceElements // reserved for future use (e.g. tie backrefs)
         return .new(prefix + [.chord(chord)] + suffix)
+    }
+
+    /// The `Note` a pitched or unpitched `<note>` carries — an ordinary chord's tone or a grace's.
+    static func decodePitchedNote(
+        _ node: XMLTreeNode,
+        drumTable: MusicXMLDrumTable,
+        transposition: MusicXMLTransposition,
+    ) throws -> Note {
+        let (midi, tpc) = try decodePitch(node, drumTable: drumTable, transposition: transposition)
+        let (tieForward, tieBack) = decodeTies(node)
+        let tabPosition = decodeTabPosition(node)
+        return Note(
+            pitch: midi,
+            tpc: tpc,
+            accidental: decodeAccidental(node),
+            tieForward: tieForward,
+            tieBack: tieBack,
+            parentheses: decodeNoteheadParentheses(node),
+            userVelocity: decodeUserVelocity(node),
+            fret: tabPosition.fret,
+            string: tabPosition.string,
+        )
     }
 
     /// The stored `(midi, tpc)` of a pitched or unpitched `<note>`. A `<pitch>` is written pitch and moves to concert
@@ -171,7 +189,7 @@ enum MusicXMLNoteDecoder {
     /// MusicXML encodes fermatas under `<notations><fermata>`. The element's
     /// text (if any) is the fermata shape ("normal", "square", "angled", …);
     /// empty means normal. We map to MuseScore's `<subtype>` spelling.
-    private static func decodeFermata(_ node: XMLTreeNode) -> Fermata? {
+    static func decodeFermata(_ node: XMLTreeNode) -> Fermata? {
         guard let notations = node.first("notations") else { return nil }
         guard let fermataNode = notations.first("fermata") else { return nil }
         let shape = fermataNode.text
