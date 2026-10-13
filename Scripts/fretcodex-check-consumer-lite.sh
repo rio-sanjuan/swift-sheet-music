@@ -7,9 +7,15 @@
 # with upstream, before tagging.
 #
 #   Scripts/fretcodex-check-consumer-lite.sh
+#
+# Works from a checkout of any name. SwiftPM names a path dependency after its directory — the
+# package identity is the lowercased last path component, not the manifest's `name` — so the probe
+# addresses the products by that identity, worked out from the checkout's physical path (symlinks
+# resolved, which is the path the probe hands SwiftPM).
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/.." && pwd -P)"
+identity="$(basename "$root" | tr '[:upper:]' '[:lower:]')"
 if [[ "${SWIFT_SHEET_MUSIC_DEV:-}" == "1" ]]; then
   echo "error: unset SWIFT_SHEET_MUSIC_DEV — the check is of the consumer (default) shape" >&2
   exit 2
@@ -32,15 +38,15 @@ let package = Package(
         .target(
             name: "Probe",
             dependencies: [
-                .product(name: "SheetMusicCore", package: "swift-sheet-music"),
-                .product(name: "SheetMusicMSCX", package: "swift-sheet-music"),
-                .product(name: "SheetMusicMusicXML", package: "swift-sheet-music"),
-                .product(name: "SheetMusicMIDI", package: "swift-sheet-music"),
-                .product(name: "SheetMusicLayout", package: "swift-sheet-music"),
-                .product(name: "SheetMusicLayoutApple", package: "swift-sheet-music"),
-                .product(name: "SheetMusicUI", package: "swift-sheet-music"),
-                .product(name: "SheetMusicPDF", package: "swift-sheet-music"),
-                .product(name: "SheetMusicOMRModel", package: "swift-sheet-music"),
+                .product(name: "SheetMusicCore", package: "$identity"),
+                .product(name: "SheetMusicMSCX", package: "$identity"),
+                .product(name: "SheetMusicMusicXML", package: "$identity"),
+                .product(name: "SheetMusicMIDI", package: "$identity"),
+                .product(name: "SheetMusicLayout", package: "$identity"),
+                .product(name: "SheetMusicLayoutApple", package: "$identity"),
+                .product(name: "SheetMusicUI", package: "$identity"),
+                .product(name: "SheetMusicPDF", package: "$identity"),
+                .product(name: "SheetMusicOMRModel", package: "$identity"),
             ]
         ),
     ]
