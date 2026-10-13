@@ -282,9 +282,9 @@ enum MSCXPreservation {
         // `Note/Spanner`, `Spanner/prev`, `location/fractions` and `next/location` used to sit here too: the only
         // fixture that lost them was a glissando, whose begin side was written with a bare `<next/>` and whose end
         // side was not written at all. Both sides now carry their `<location>`, so the entries would be stale.
-        allow([
-            "location/measures", "prev/location",
-        ], because: endpointReason, into: &result)
+        // `location/measures` and `prev/location` followed them: they were a voice-level spanner's end side
+        // (`<Spanner type="Volta"><prev><location>…`), re-written as a bare `<prev/>` until
+        // `Spanner.prevMeasuresOffset` / `prevFractionsOffset` modeled that location.
         allow([
             "location/voices",
         ], because: crossVoiceEndpointReason, into: &result)

@@ -21,6 +21,9 @@ import SheetMusicFoundation
 ///   practice) feeds tag 32, the count and each spanner's identity via `combine(_ spanner:)`; a chord with an
 ///   empty array feeds nothing, so every score without slurs hashes as it did before. Added with group 6's
 ///   `SetSlur` / `RemoveSpanner`. See `ScoreFingerprintHasher+Parity.swift`.
+/// - Not covered: `Spanner.prevMeasuresOffset` / `prevFractionsOffset`, the `<prev>` location of a
+///   voice-level spanner's end side. Source fidelity the MSCX decoder keeps so the pair survives a save;
+///   no edit command writes it.
 /// - `Lyric.elementProperties` IS covered, by occupants (visible tag 61, color 62) — brought in by
 ///   `SetTextVisible` (intent 75), which hides a syllable without touching the chord it hangs from, and would
 ///   otherwise be an edit no mirror could disagree about.

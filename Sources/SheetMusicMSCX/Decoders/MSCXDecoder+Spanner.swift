@@ -22,10 +22,11 @@ extension Spanner {
                 .compactMap { Int($0) }
         }
 
-        let nextLocation = node.first("next")?.first("location")
-        let nextMeasures = Int(nextLocation?.first("measures")?.text ?? "0") ?? 0
-        let nextFractions = nextLocation?.first("fractions")
-            .flatMap { Fraction(mscxString: $0.text) }
+        let next = relativeLocation(of: node.first("next"))
+        // The end side's `<prev>` location, read exactly as `<next>` is: it is what lets
+        // MuseScore pair the end side with its begin side again, so it must survive a round
+        // trip (see `Spanner.prevMeasuresOffset`).
+        let prev = relativeLocation(of: node.first("prev"))
 
         let hairpin = kind == .hairpin ? node.first("HairPin").map(decodeHairpin) : nil
 
@@ -61,8 +62,10 @@ extension Spanner {
         var spanner = Spanner(
             kind: kind,
             rawType: raw,
-            nextMeasuresOffset: nextMeasures,
-            nextFractionsOffset: nextFractions,
+            nextMeasuresOffset: next.measures,
+            nextFractionsOffset: next.fractions,
+            prevMeasuresOffset: prev.measures,
+            prevFractionsOffset: prev.fractions,
             voltaEndings: voltaEndings,
             visible: elementProperties.visible,
             beginText: decodeBeginText(node),
@@ -77,6 +80,16 @@ extension Spanner {
         )
         spanner.elementProperties = elementProperties
         return spanner
+    }
+
+    /// The `<measures>` / `<fractions>` of a `<next>` or `<prev>` side's relative
+    /// `<location>`: `0` and `nil` where the side, its `<location>` or the child is absent.
+    private static func relativeLocation(of side: XMLTreeNode?) -> (measures: Int, fractions: Fraction?) {
+        let location = side?.first("location")
+        return (
+            measures: Int(location?.first("measures")?.text ?? "0") ?? 0,
+            fractions: location?.first("fractions").flatMap { Fraction(mscxString: $0.text) },
+        )
     }
 
     /// `<beginText>` lives on the subtype payload child, not on the

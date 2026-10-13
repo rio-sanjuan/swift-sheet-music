@@ -30,6 +30,25 @@ public struct Spanner: Sendable, Equatable {
     /// spanners only emit `<measures>` (whole-measure offsets); the
     /// non-nil case is spanners that end mid-measure.
     public var nextFractionsOffset: Fraction?
+    /// MuseScore `<prev><location><measures>N</measures></location></prev>` on a voice-level
+    /// spanner's END side — the payload-less `<Spanner>` MuseScore writes where the spanner ends,
+    /// modeled as an invisible `Spanner` in that measure's voice. It points back at the begin side:
+    /// the begin side's `<next>` read the other way (`Location::toRelative` from the end tick), so
+    /// it is the negation of the begin side's `nextMeasuresOffset` / `nextFractionsOffset` — a
+    /// volta whose `<next>` says `measures 2` has an end side two bars on whose `<prev>` says
+    /// `measures -2`.
+    ///
+    /// MuseScore pairs the two halves only when both locations agree; an end side with no
+    /// `<prev>` location is never paired and the spanner is dropped on load. So the decoder keeps
+    /// it and the encoder writes it back. `0` / `nil` (the default, and the value on every begin
+    /// side) writes the bare `<prev/>` an end side built without one always got. Meaningful only
+    /// on an end side (`visible == false`); a begin side never writes `<prev>`.
+    public var prevMeasuresOffset: Int = 0
+    /// MuseScore `<prev><location><fractions>N/D</fractions></location></prev>` on an end side —
+    /// the fraction half of `prevMeasuresOffset`. `nil` when MuseScore elided it (the end side sits
+    /// at the same position in its bar as the begin side does in its own); a volta that ends at the
+    /// score's last tick carries `-(the last bar's length)`.
+    public var prevFractionsOffset: Fraction?
     public var voltaEndings: [Int] // for Volta: the take-numbers (1, 2, …)
     /// Smallest volta ending number, or 0 when `voltaEndings` is
     /// empty. Mirrors `Volta::firstEnding` — the 0 case signals
@@ -93,6 +112,8 @@ public struct Spanner: Sendable, Equatable {
         rawType: String,
         nextMeasuresOffset: Int = 0,
         nextFractionsOffset: Fraction? = nil,
+        prevMeasuresOffset: Int = 0,
+        prevFractionsOffset: Fraction? = nil,
         voltaEndings: [Int] = [],
         visible: Bool = true,
         beginText: String? = nil,
@@ -107,6 +128,8 @@ public struct Spanner: Sendable, Equatable {
         self.rawType = rawType
         self.nextMeasuresOffset = nextMeasuresOffset
         self.nextFractionsOffset = nextFractionsOffset
+        self.prevMeasuresOffset = prevMeasuresOffset
+        self.prevFractionsOffset = prevFractionsOffset
         self.voltaEndings = voltaEndings
         elementProperties = ElementProperties(
             visible: visible, placement: placement,

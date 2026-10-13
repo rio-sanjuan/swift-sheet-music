@@ -10,8 +10,16 @@ extension Spanner {
     ///
     /// We dispatch on `visible`: a begin-side preserves the payload
     /// (and Volta endings / measures + fractions offsets), an
-    /// end-side emits just `<prev/>` so the parser recovers
-    /// `visible == false`.
+    /// end-side emits just `<prev>` so the parser recovers
+    /// `visible == false` — with the `<location>` its
+    /// `prevMeasuresOffset` / `prevFractionsOffset` hold, which is how
+    /// MuseScore pairs it back to its begin side, or as the bare
+    /// `<prev/>` when the model holds none.
+    ///
+    /// The end side is written only where the voice holds one. The
+    /// encoder never synthesizes one from a begin side: a consumer that
+    /// writes its own end side (as `.preserved` markup, say) would get
+    /// two.
     ///
     /// **No `<eid>` here, deliberately.** The `<Spanner type="X">` wrapper
     /// this method builds is not itself an `EngravingItem` — MuseScore's
@@ -36,7 +44,7 @@ extension Spanner {
                 children.append(next)
             }
         } else {
-            children.append(XMLTreeNode(name: "prev"))
+            children.append(prevLocationElement())
         }
         appendPreservedMarkup(preservedMarkup, to: &children, options: options)
         return XMLTreeNode(
@@ -44,6 +52,22 @@ extension Spanner {
             attributes: ["type": rawType],
             children: children,
         )
+    }
+
+    /// `<prev><location>…</location></prev>` for an end side, or the bare
+    /// `<prev/>` when both offsets are at their defaults — byte for byte
+    /// what every end side was written as before the offsets were modeled.
+    /// The same `<location>` writer as `<next>`, so the two halves of a
+    /// pair are spelled alike.
+    private func prevLocationElement() -> XMLTreeNode {
+        let locationChildren = Self.relativeLocationChildren(
+            measures: prevMeasuresOffset,
+            fractions: prevFractionsOffset,
+        )
+        guard !locationChildren.isEmpty else { return XMLTreeNode(name: "prev") }
+        return XMLTreeNode(name: "prev", children: [
+            XMLTreeNode(name: "location", children: locationChildren),
+        ])
     }
 
     /// The begin-side payload child. MuseScore names this child after
