@@ -58,9 +58,13 @@ struct FretCodexMusicXMLChartTests {
         }
     }
 
+    /// The volta BEGIN sides in a measure. Since F2 an ending also has an end side, in the bar after it closes
+    /// (`FretCodexMusicXMLEndingsTests`); it carries no endings.
     static func voltas(_ score: Score, measure: Int) -> [Spanner] {
         F.elements(score, measure: measure).compactMap { element in
-            if case let .spanner(spanner) = element, spanner.kind == .volta { return spanner }
+            if case let .spanner(spanner) = element, spanner.kind == .volta, !spanner.voltaEndings.isEmpty {
+                return spanner
+            }
             return nil
         }
     }

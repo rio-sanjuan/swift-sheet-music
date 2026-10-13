@@ -127,8 +127,9 @@ extension Score {
         // measure index with originalStaff stamped.
         var perStaffSystemElements: [(address: StaffAddress, perMeasure: [[PositionedSystemElement]])] = []
         var measureFactsByPart: [[MusicXMLMeasureFacts]] = []
+        var voltasByPart: [MusicXMLVoltaTracker] = []
         for (index, partNode) in root.all("part").enumerated() {
-            let (part, staffElements, measureFacts) = try decodeOnePart(
+            let (part, staffElements, measureFacts, voltas) = try decodeOnePart(
                 partNode: partNode,
                 scoreParts: scoreParts,
                 index: index,
@@ -137,8 +138,11 @@ extension Score {
             parts.append(part)
             perStaffSystemElements.append(contentsOf: staffElements)
             measureFactsByPart.append(measureFacts)
+            voltasByPart.append(voltas)
         }
         parts = sizingMeasures(parts, by: MusicXMLMeasureLength.resolve(measureFactsByPart))
+        // Voltas last: an ending that closes on the score's last tick is written against that bar's actual length.
+        parts = zip(parts, voltasByPart).map { part, voltas in voltas.apply(to: part) }
         let measureCount = perStaffSystemElements
             .map(\.perMeasure.count)
             .max() ?? 0
@@ -185,6 +189,7 @@ extension Score {
         part: Part,
         staffElements: [(address: StaffAddress, perMeasure: [[PositionedSystemElement]])],
         measureFacts: [MusicXMLMeasureFacts],
+        voltas: MusicXMLVoltaTracker,
     ) {
         let id = partNode.attributes["id"] ?? ""
         guard let scorePart = scoreParts.first(where: { $0.attributes["id"] == id })
@@ -251,6 +256,6 @@ extension Score {
             StaffAddress(partIndex: partIndex, staffIndexInPart: 0),
             instrumentChangesByMeasure,
         ))
-        return (part, staffElements, walker.measureFacts)
+        return (part, staffElements, walker.measureFacts, walker.voltas)
     }
 }

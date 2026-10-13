@@ -43,6 +43,10 @@ enum MusicXMLMeasureWalker {
         /// One entry per `<measure>`: what the score decoder needs to size
         /// the bar across parts (`MusicXMLMeasureLength`).
         let measureFacts: [MusicXMLMeasureFacts]
+        /// The part's closed endings. The score decoder inserts their volta
+        /// sides once the bars are sized — a volta ending on the score's last
+        /// tick is written against that bar's actual length.
+        let voltas: MusicXMLVoltaTracker
     }
 
     static func decode(
@@ -81,9 +85,6 @@ enum MusicXMLMeasureWalker {
             if index == 0 { initialTransposition = state.attributes.transposition }
         }
         state.voltaTracker.finish(lastMeasureIndex: measureNodes.count - 1)
-        if !perStaffMeasures.isEmpty {
-            state.voltaTracker.apply(to: &perStaffMeasures[0])
-        }
         let withGlides = applyGlides(
             attachments: state.glideTracker.attachments,
             measures: perStaffMeasures,
@@ -99,6 +100,7 @@ enum MusicXMLMeasureWalker {
             stringData: preferredStringData(attributes),
             transposition: initialTransposition,
             measureFacts: measureFacts,
+            voltas: state.voltaTracker,
         )
     }
 
