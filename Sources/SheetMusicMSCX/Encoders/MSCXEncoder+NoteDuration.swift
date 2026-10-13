@@ -68,7 +68,9 @@ extension NoteDuration {
     /// change the score's structure behind the caller's back.
     ///
     /// `.measure` is refused too — a chord carries no "fills the bar" marker
-    /// in MSCX, and this check has no bar length to resolve one against.
+    /// in MSCX, and this check has no bar length to resolve one against. The
+    /// voice encoder resolves a whole-bar chord to its bar's note value
+    /// first, so the `.measure` that can still arrive is a grace's.
     func requireChordSpelling(location: String) throws {
         if case .measure = self {
             throw Self.chordDurationNotRepresentable(
@@ -105,6 +107,15 @@ extension NoteDuration {
     /// the voice encoder checks `requireChordSpelling` before it gets
     /// here, so no chord it writes takes the fallback).
     ///
+    /// `.measure` without the bar's length writes the bare
+    /// `<durationType>measure</durationType>` rather than trapping, as it
+    /// used to. Every voice path supplies the bar: a rest goes through
+    /// `appendDurationXML(to:in:)`, which writes the length too, and a
+    /// whole-bar chord is resolved to the bar's note value before it gets
+    /// here (`Voice.encodeChord`). This branch only answers a direct
+    /// caller with no bar in hand; the decoder reads the bare form as a
+    /// measure rest, whose `<duration>` it treats as informational anyway.
+    ///
     /// Element order matches MuseScore Studio's writer: `<dots>`
     /// precedes `<durationType>`. Emitting them in the reverse
     /// order (durationType first) makes MuseScore's loader read the
@@ -113,11 +124,8 @@ extension NoteDuration {
     /// out as an extra rest.
     func appendDurationXML(to children: inout [XMLTreeNode]) {
         if case .measure = self {
-            preconditionFailure(
-                "appendDurationXML: .measure must be written via "
-                    + "the appendDurationXML(to:in:) overload that "
-                    + "carries the effective measure duration",
-            )
+            children.append(XMLTreeNode(name: "durationType", text: "measure"))
+            return
         }
         if let parts = decomposed() {
             if parts.dots > 0 {

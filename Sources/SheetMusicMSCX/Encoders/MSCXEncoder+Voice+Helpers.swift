@@ -79,10 +79,22 @@ extension Voice {
     /// `.measure` keep the historical sum-based path so tests
     /// authored against pre-`.measure` fixtures continue to
     /// round-trip byte-identically.
+    ///
+    /// A whole-bar chord (`.measure` with notes) counts too: it is written
+    /// as the bar's own note value, so a tie leaving it measures from the
+    /// bar's length exactly as a measure rest's neighbours do. Voices
+    /// without either never reach the substitution, so their output is
+    /// unchanged.
     func resolvedBarLength(effectiveDuration: Fraction) -> Fraction {
-        elements.contains(where: \.isMeasureRest)
+        elements.contains(where: Self.hasMeasureDuration)
             ? effectiveDuration
             : computedBarLength()
+    }
+
+    /// A chord or rest whose duration is the `.measure` marker.
+    private static func hasMeasureDuration(_ element: VoiceElement) -> Bool {
+        if case let .chord(chord) = element, case .measure = chord.duration { return true }
+        return false
     }
 
     /// Sum of all played durations in the voice. The cross-measure

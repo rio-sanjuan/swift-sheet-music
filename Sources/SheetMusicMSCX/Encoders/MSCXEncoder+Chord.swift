@@ -237,11 +237,11 @@ extension Chord {
             - MSCXLocationNoteIndex.index(ofPitch: pitch, in: notes)
     }
 
-    /// Encode as a `<Rest>` (notes-empty representation). Traps via
-    /// `appendDurationXML`'s precondition if `duration == .measure`;
-    /// callers that may carry `.measure` rests must use the
-    /// `encodeAsRest(options:in:)` overload that supplies the
-    /// effective measure duration.
+    /// Encode as a `<Rest>` (notes-empty representation). A `.measure`
+    /// rest writes the bare `<durationType>measure</durationType>` here,
+    /// with no `<duration>`; callers that may carry `.measure` rests
+    /// should use the `encodeAsRest(options:in:)` overload, which
+    /// supplies the effective measure duration and writes it too.
     ///
     /// A rest carries chord-anchored spanner markers exactly as a chord does:
     /// MuseScore anchors slurs to any `ChordRest` and writes both sides

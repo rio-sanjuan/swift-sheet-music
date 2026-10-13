@@ -6,7 +6,8 @@ import Testing
 
 /// FretCodex fork, delta F2: what the MSCX encoder writes for a chord's duration. A `<Chord>` has exactly one
 /// spelling — a note value with up to MuseScore's four dots — so the encoder writes that or refuses; it never writes
-/// a chord its own decoder (or MuseScore) rejects, which used to make the whole file unreadable. Scores are built in
+/// a chord its own decoder (or MuseScore) rejects, which used to make the whole file unreadable (SM-2), and a
+/// whole-bar `.measure` chord is written as its bar's note value instead of trapping (SM-1). Scores are built in
 /// code; nothing here comes from `Tests/SheetMusicTests/Resources/` (see `FretCodexFixtures`).
 @Suite("FretCodex F2 — MSCX chord durations")
 struct FretCodexMSCXDurationTests {
@@ -55,6 +56,63 @@ struct FretCodexMSCXDurationTests {
         }
         return false
     }
+
+    // MARK: - SM-1: a whole-bar chord
+
+    @Test("a whole-bar chord is written as its bar's note value and reads back as that value")
+    func wholeBarChord() throws {
+        let cases: [(bar: Fraction, written: String, dots: String?)] = [
+            (Fraction(numerator: 4, denominator: 4), "whole", nil),
+            (Fraction(numerator: 3, denominator: 4), "half", "1"),
+            (Fraction(numerator: 7, denominator: 8), "half", "2"),
+            (Fraction(numerator: 1, denominator: 4), "quarter", nil), // a one-beat pickup
+        ]
+        for (bar, written, dots) in cases {
+            let bytes = try MSCXEncoder.encode(Self.score([Self.chord(.measure)], measureLength: bar))
+            let chord = try #require(XMLTreeParser.parse(bytes).first("Score")?.first("Staff")?.first("Measure")?
+                .first("voice")?.first("Chord"), "\(bar)")
+            #expect(chord.first("durationType")?.text == written, "\(bar)")
+            #expect(chord.first("dots")?.text == dots, "\(bar)")
+            #expect(chord.all("duration").isEmpty, "\(bar)")
+            let decoded = try MSCXParser.parse(bytes)
+            #expect(Self.firstChord(decoded)?.duration == NoteDuration.measure.resolved(in: bar), "\(bar)")
+            #expect(Self.firstChord(decoded)?.notes.map(\.pitch) == [60], "\(bar)")
+        }
+    }
+
+    @Test("a whole-bar chord in a bar no single note value fills throws instead of trapping")
+    func wholeBarChordWithoutANoteValue() {
+        #expect(Self.faultCode(encoding: Self.score(
+            [Self.chord(.measure)], measureLength: Fraction(numerator: 5, denominator: 4),
+        )) == "mscx.encoder.chordDurationNotRepresentable")
+    }
+
+    @Test("a whole-bar chord tied into the next bar keeps the tie")
+    func wholeBarChordTie() throws {
+        let staff = Staff(
+            staffType: "stdNormal", group: "pitched", defaultClefType: nil,
+            measures: [
+                Measure(voices: [Voice(elements: [.chord(Chord(
+                    duration: .measure, notes: ChordNotes([Note(pitch: 60, tpc: 14, tieForward: 1)]),
+                ))])], actualLength: Fraction(numerator: 3, denominator: 4)),
+                Measure(voices: [Voice(elements: [.chord(Chord(
+                    duration: .half, notes: ChordNotes([Note(pitch: 60, tpc: 14, tieBack: 1)]),
+                ))])], actualLength: Fraction(numerator: 3, denominator: 4)),
+            ],
+        )
+        let score = Score(division: 480, parts: [
+            Part(id: "1", trackName: "Guitar", instrument: Instrument(id: "guitar"), staves: [staff]),
+        ])
+        let decoded = try MSCXParser.parse(MSCXEncoder.encode(score))
+        let notes = decoded.parts[0].staves[0].measures.compactMap { measure -> Note? in
+            guard case let .chord(chord) = measure.voices[0].elements.values.first else { return nil }
+            return chord.notes.first
+        }
+        #expect(notes.map { $0.tieForward != nil } == [true, false])
+        #expect(notes.map { $0.tieBack != nil } == [false, true])
+    }
+
+    // MARK: - SM-2: dots
 
     @Test("a four-dot chord writes <dots>4</dots> and reads back")
     func fourDots() throws {
