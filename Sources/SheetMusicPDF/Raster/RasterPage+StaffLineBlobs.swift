@@ -102,7 +102,7 @@ extension RasterPage {
     /// The rows of a blob that are the LINE: those contiguous with the
     /// widest row and themselves at least `staffLineCoreRowWidthFraction`
     /// of it. Indices into `rowWidths` / `rowX0` / `rowX1`.
-    private static func coreRows(of blob: LineBlob) -> ClosedRange<Int>? {
+    static func coreRows(of blob: LineBlob) -> ClosedRange<Int>? {
         guard let widest = blob.rowWidths.max(), widest > 0,
               let peak = blob.rowWidths.firstIndex(of: widest)
         else { return nil }

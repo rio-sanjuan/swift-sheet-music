@@ -93,6 +93,7 @@ extension PDFImporter {
                 result = try RasterFrontEnd.page(
                     bitmap: bitmap, pageIndex: index, detector: detector,
                     diagnostics: options.diagnostics,
+                    keepsBeamsOutOfLines: options.omrKeepsBeamsOutOfStaffLines,
                 )
             } catch {
                 // Same shape as the missing-`CGPDFPage` case above: say what

@@ -59,7 +59,12 @@ extension RasterPage {
     /// measured against a guessed scale: every threshold below is in
     /// staff spaces, and without a staff there is no space to measure
     /// them in.
-    static func analyze(_ bitmap: GrayBitmap, pageIndex: Int, keepDeskewed: Bool = false) -> RasterPageAnalysis {
+    ///
+    /// `keepsBeamsOutOfLines` leaves a beam's ink out of the staff lines
+    /// (`PDFImportOptions.omrKeepsBeamsOutOfStaffLines`).
+    static func analyze(
+        _ bitmap: GrayBitmap, pageIndex: Int, keepDeskewed: Bool = false, keepsBeamsOutOfLines: Bool = false,
+    ) -> RasterPageAnalysis {
         let angle = estimateSkewDegrees(binarize(bitmap))
         let straight = rotate(bitmap, degrees: -angle)
         let mask = binarize(straight)
@@ -76,6 +81,7 @@ extension RasterPage {
         }
         var paths = staffLineSegments(
             mask, spacingPx: spacingPx, transform: transform, pageIndex: pageIndex,
+            keepsBeamsOut: keepsBeamsOutOfLines,
         )
         // Beams FIRST: a beamed note's stem is shortened to meet its
         // beam, so the vertical pass needs the beams to tell such a stem

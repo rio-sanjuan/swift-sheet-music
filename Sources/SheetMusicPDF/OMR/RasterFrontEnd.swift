@@ -12,13 +12,15 @@ import SheetMusicCore
 enum RasterFrontEnd {
     static func page(
         bitmap: GrayBitmap, pageIndex: Int, detector: any OMRGlyphDetecting,
-        diagnostics: (@Sendable (PDFImportDiagnostic) -> Void)?,
+        diagnostics: (@Sendable (PDFImportDiagnostic) -> Void)?, keepsBeamsOutOfLines: Bool = false,
     ) throws -> (walked: WalkedContent, pageSize: CGSize) {
         // keepDeskewed: the detector consumes the deskewed grayscale. It is
         // opt-in because a page is ~18MB and holding one per page multiplies a
         // sweep's peak RSS by the page count — so the analysis dies here, with
         // this function's frame.
-        let analysis = RasterPage.analyze(bitmap, pageIndex: pageIndex, keepDeskewed: true)
+        let analysis = RasterPage.analyze(
+            bitmap, pageIndex: pageIndex, keepDeskewed: true, keepsBeamsOutOfLines: keepsBeamsOutOfLines,
+        )
         return try assembled(
             analysis: analysis, pageIndex: pageIndex, detector: detector,
             diagnostics: diagnostics,

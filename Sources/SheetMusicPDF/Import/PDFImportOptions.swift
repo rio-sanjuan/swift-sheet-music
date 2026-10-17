@@ -151,6 +151,20 @@ public struct PDFImportOptions: Sendable {
     /// is a per-parse choice, not a new default. Vector pages never read it.
     public var omrStemHeadEndTolerance: Double?
 
+    /// Whether the raster staff-line finder keeps beams out of the lines it
+    /// finds. Off by default.
+    ///
+    /// The finder takes a row inked 50 points or more across, three quarters
+    /// of it, for a line, and a beam's rows are that too: one lying across a
+    /// space joins two lines into one blob, which gives one line, and one
+    /// within a space adds a sixth; either way the staff is lost with its
+    /// system. On, a blob is split into the lines a beam joined
+    /// (`RasterPage.linesInBlob`), and a blob thicker than a line and
+    /// narrower than a system is not one (`RasterPage.isBeam`). For a host
+    /// reading photographs, where a page is often held closer than 300 dpi
+    /// and a beam's 50 points are a few staff spaces long.
+    public var omrKeepsBeamsOutOfStaffLines = false
+
     /// TESTING ONLY, INTERNAL. Substitutes the whole glyph-detection stage so the
     /// harness can replay labels or precomputed detections through the product
     /// path. Takes precedence over `omrTileClassifier`. Not `public` for the same

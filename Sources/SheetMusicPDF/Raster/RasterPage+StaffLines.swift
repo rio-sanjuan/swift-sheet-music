@@ -247,8 +247,14 @@ extension RasterPage {
     /// wider than `lineClusterWidthGate` = 50pt, so a line that arrives
     /// as ten 30pt fragments is not a slightly worse line, it is a line
     /// that does not exist.
+    ///
+    /// `keepsBeamsOut` keeps a beam out of the lines
+    /// (`PDFImportOptions.omrKeepsBeamsOutOfStaffLines`): a blob is split
+    /// into the lines a beam joined (`linesInBlob`), and a blob that is a
+    /// beam alone is not a line (`isBeam`).
     static func staffLineSegments(
         _ mask: InkMask, spacingPx: Double, transform: PageTransform, pageIndex: Int,
+        keepsBeamsOut: Bool = false,
     ) -> [PathSegment] {
         let gapTolerance = max(1, Int((staffLineGapToleranceInSpaces * spacingPx).rounded()))
         let minWidthPx = max(1, Int((staffLineMinWidthPt * transform.dpi / 72.0).rounded()))
@@ -259,10 +265,15 @@ extension RasterPage {
                 mask, y: y, gapTolerance: gapTolerance, minWidthPx: minWidthPx,
             ))
         }
-        let found = blobs(runsByRow)
-        let floor = referenceWidth(found) * staffLineMinWidthFractionOfWidest
+        var found = blobs(runsByRow)
+        if keepsBeamsOut {
+            found = found.flatMap { linesInBlob($0, spacingPx: spacingPx) }
+        }
+        let reference = referenceWidth(found)
+        let floor = reference * staffLineMinWidthFractionOfWidest
         return found
             .filter { Double($0.x1 - $0.x0 + 1) >= floor }
+            .filter { !keepsBeamsOut || !isBeam($0, spacingPx: spacingPx, referenceWidth: reference) }
             .map { segment(from: $0, transform: transform, pageIndex: pageIndex) }
     }
 
@@ -359,5 +370,81 @@ extension RasterPage {
         }
         if let from = start, let last = lastInk { close(from, last, inked) }
         return out
+    }
+
+    // MARK: - Beams kept out of staff lines
+
+    /// Least height, in staff spaces, of the narrower rows between two wide
+    /// ones that `linesInBlob` takes for a beam joining two lines: a beam is
+    /// half a space thick, and a line a row or two thinner where it is worn
+    /// is the same line.
+    static let beamJoinMinRowsInSpaces = 0.25
+
+    /// Least thickness, in staff spaces, of a blob's line rows for `isBeam`
+    /// to take it for a beam: a beam is half a space thick, a staff line a
+    /// fraction of that — 0.25 of a space photographed at 15 pixels a space.
+    static let beamMinThicknessInSpaces = 0.4
+
+    /// Most width, against the page's reference line width, of a blob
+    /// `isBeam` takes for a beam: a staff line spans its system.
+    static let beamMaxWidthFraction = 0.5
+
+    /// The lines in `blob`: one, or — where a beam lying across a space
+    /// joined the lines either side into one blob — each run of rows at least
+    /// `staffLineCoreRowWidthFraction` of its widest row, apart from the next
+    /// by narrower rows at least `beamJoinMinRowsInSpaces` tall.
+    ///
+    /// A beam's row is inked 50 points and more across, nearly all of it, so
+    /// it passes the gates a line row does, and the blob takes in both lines
+    /// and the beam between. `centerRow` then finds the one line its widest
+    /// row belongs to, and the other is lost with its staff.
+    static func linesInBlob(_ blob: LineBlob, spacingPx: Double) -> [LineBlob] {
+        guard let widest = blob.rowWidths.max(), widest > 0 else { return [blob] }
+        let floor = Double(widest) * staffLineCoreRowWidthFraction
+        let valley = max(2, Int((beamJoinMinRowsInSpaces * spacingPx).rounded()))
+        var runs: [ClosedRange<Int>] = []
+        var start: Int?
+        for (row, width) in blob.rowWidths.enumerated() {
+            if Double(width) >= floor {
+                if start == nil { start = row }
+            } else if let from = start {
+                runs.append(from ... row - 1)
+                start = nil
+            }
+        }
+        if let from = start { runs.append(from ... blob.rowWidths.count - 1) }
+        // Runs closer than a beam is thick are one line, worn in the middle.
+        var lines: [ClosedRange<Int>] = []
+        for run in runs {
+            if let last = lines.last, run.lowerBound - last.upperBound - 1 < valley {
+                lines[lines.count - 1] = last.lowerBound ... run.upperBound
+            } else {
+                lines.append(run)
+            }
+        }
+        guard lines.count > 1 else { return [blob] }
+        return lines.map { rows in
+            LineBlob(
+                x0: blob.rowX0[rows].min() ?? blob.x0, x1: blob.rowX1[rows].max() ?? blob.x1,
+                yTop: blob.yTop + rows.lowerBound, yBottom: blob.yTop + rows.upperBound,
+                rowWidths: Array(blob.rowWidths[rows]),
+                rowX0: Array(blob.rowX0[rows]), rowX1: Array(blob.rowX1[rows]),
+            )
+        }
+    }
+
+    /// Whether `blob` is a beam on its own, not a line: its line rows
+    /// (`coreRows`) are `beamMinThicknessInSpaces` thick or more, and it is
+    /// less than `beamMaxWidthFraction` of the page's reference width.
+    ///
+    /// A beam lying within a space, long enough to clear the width floor, is
+    /// a sixth line there, and `detectStaves` finds no five evenly spaced
+    /// lines. A line a beam lies on keeps it: its line rows are its own, or
+    /// it is as wide as its system.
+    static func isBeam(_ blob: LineBlob, spacingPx: Double, referenceWidth: Double) -> Bool {
+        guard let core = coreRows(of: blob) else { return false }
+        let thick = max(4, Int((beamMinThicknessInSpaces * spacingPx).rounded(.up)))
+        return core.count >= thick
+            && Double(blob.x1 - blob.x0 + 1) < beamMaxWidthFraction * referenceWidth
     }
 }
