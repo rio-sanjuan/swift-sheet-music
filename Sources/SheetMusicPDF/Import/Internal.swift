@@ -229,6 +229,11 @@ struct ImportMeasure {
     /// y → diatonic step. Empty when constructed by callers that
     /// don't need pitch information (e.g. ScoreState tests).
     var staffYLines: [CGFloat] = []
+    /// The glyphs of a content-free sliver dropped right after this measure
+    /// (`dropContentFreeNarrowCells`): on a system's last measure, the
+    /// courtesy signature engraved past its final barline. Read only by
+    /// `readCourtesyKey`; nothing else sees them.
+    var droppedTrailingGlyphs: [ClassifiedGlyph] = []
 }
 
 /// Stage [5b] output — score-state events, in x-order, per staff.

@@ -309,6 +309,7 @@ extension PDFImporter {
         var events = scoreStateEvents(
             staff: importStaff, texts: [],
             diagnostics: options.diagnostics, location: location,
+            reportsKeys: options.omrReportsKeyReadings,
         )
         // Resolve this system's opening clef against the slot's other
         // systems before anything reads it. Ahead of the F8va remap on

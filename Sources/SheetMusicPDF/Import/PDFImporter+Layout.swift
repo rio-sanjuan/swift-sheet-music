@@ -190,13 +190,20 @@ extension PDFImporter {
             if present, allFreeNarrow { dropIndices.append(i) }
         }
         guard !dropIndices.isEmpty else { return }
-        // Never drop a staff below one remaining cell.
+        // Never drop a staff below one remaining cell. A dropped cell's
+        // glyphs go with the kept cell before it (`droppedTrailingGlyphs`):
+        // a courtesy signature past a system's final barline is one.
         let dropSet = Set(dropIndices)
         for p in parts.indices {
             for s in parts[p].staves.indices {
-                let kept = parts[p].staves[s].measures.enumerated()
-                    .filter { !dropSet.contains($0.offset) }
-                    .map(\.element)
+                var kept: [ImportMeasure] = []
+                for (i, cell) in parts[p].staves[s].measures.enumerated() {
+                    if !dropSet.contains(i) {
+                        kept.append(cell)
+                    } else if !kept.isEmpty {
+                        kept[kept.count - 1].droppedTrailingGlyphs += cell.glyphs
+                    }
+                }
                 if !kept.isEmpty {
                     parts[p].staves[s].measures = kept
                 }

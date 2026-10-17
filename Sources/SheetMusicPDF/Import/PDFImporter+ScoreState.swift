@@ -12,10 +12,15 @@ extension PDFImporter {
     /// most one clef, one key signature, and one time signature event.
     /// Tempos are extracted from the page's text glyphs and tied to
     /// measure 0 of the staff (best-effort).
+    ///
+    /// `reportsKeys` says, as an `info` diagnostic, what key signature the
+    /// staff's first measure read and what courtesy key signature its last
+    /// measure ends with (`PDFImportOptions.omrReportsKeyReadings`).
     static func scoreStateEvents(
         staff: ImportStaff, texts: [TextGlyph],
         diagnostics: ((PDFImportDiagnostic) -> Void)? = nil,
         location: String = "",
+        reportsKeys: Bool = false,
     ) -> [ScoreStateEvent] {
         var events: [ScoreStateEvent] = []
         // Running clef across measures: a mid-piece key signature can sit on a
@@ -41,13 +46,32 @@ extension PDFImporter {
                 runningClef = clef
                 events.append(.clefChange(clef, atMeasureIndex: i))
             }
-            if let key = readKey(
+            let key = readKey(
                 sorted: sorted, clef: runningClef, yLines: measure.staffYLines,
                 runningKey: runningKey,
                 diagnostics: diagnostics, location: "\(location), measure \(i)",
-            ) {
+            )
+            if let key {
                 runningKey = key
                 events.append(.keySignature(key, atMeasureIndex: i))
+            }
+            if reportsKeys, i == 0 {
+                reportKeyReading(
+                    key, at: "start", clef: runningClef,
+                    diagnostics: diagnostics, location: "\(location), measure \(i)",
+                )
+            }
+            if reportsKeys, i == staff.measures.count - 1,
+               let courtesy = readCourtesyKey(
+                   sorted: (measure.glyphs + measure.droppedTrailingGlyphs)
+                       .sorted { $0.geometry.origin.x < $1.geometry.origin.x },
+                   clef: runningClef, yLines: measure.staffYLines,
+               )
+            {
+                reportKeyReading(
+                    courtesy, at: "end", clef: runningClef,
+                    diagnostics: diagnostics, location: "\(location), measure \(i)",
+                )
             }
             if let timeSig = readTime(from: sorted) {
                 // Validate before the signature enters the score state: a PDF
@@ -124,6 +148,28 @@ extension PDFImporter {
         // Tempo is a system-level marking → recovered separately into
         // `Score.systemMeasures`; see PDFImporter+Tempo.
         return events
+    }
+
+    /// Say what key signature a staff's system starts with, or what courtesy
+    /// key signature it ends with: "key signature read at this system's
+    /// start: 2" (in fifths, flats negative), or "…: none".
+    ///
+    /// The score itself can't say it. A key signature enters it only where
+    /// the key changes, so a system that read its key again and one that read
+    /// no key at all look the same there — and a host that checks a raster
+    /// page's keys against each other has to tell them apart: the one is a
+    /// second witness to the key, the other a lost one. Reported for every
+    /// staff, top to bottom; `context` names the clef the ladder was read on.
+    private static func reportKeyReading(
+        _ key: KeySignature?, at end: String, clef: Clef,
+        diagnostics: ((PDFImportDiagnostic) -> Void)?, location: String,
+    ) {
+        diagnostics?(PDFImportDiagnostic(
+            severity: .info, location: location,
+            message: "key signature read at this system's \(end): "
+                + (key.map { String($0.concertKey) } ?? "none"),
+            context: "on the \(clef.concertClefType) clef's ladder",
+        ))
     }
 
     // MARK: - E065 clef disambiguation (F8va vs plain F)

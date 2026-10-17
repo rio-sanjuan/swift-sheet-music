@@ -279,6 +279,49 @@ extension PDFImporter {
         ))
     }
 
+    /// The courtesy key signature a measure ends with: the run of like
+    /// accidentals after its last note or rest that matches the clef's
+    /// ladder, in fifths; nil when there is none. `sorted` holds the glyphs
+    /// past the final barline too (`ImportMeasure.droppedTrailingGlyphs`):
+    /// a courtesy there is a cell of its own, dropped as content-free. A naturals-only courtesy is
+    /// `readTrailingKey`'s, and isn't read here.
+    ///
+    /// Read for a report only (`PDFImportOptions.omrReportsKeyReadings`):
+    /// the key it announces is read again where it takes effect, at the next
+    /// system's start. It tells a key changed at a system break — announced
+    /// at the end of the system before — from a key read short at that
+    /// system's start, which no courtesy announces.
+    static func readCourtesyKey(
+        sorted: [ClassifiedGlyph], clef: Clef, yLines: [CGFloat],
+    ) -> KeySignature? {
+        guard let anchor = staffAnchor(clef: clef, yLines: yLines),
+              anchor.lineSpacing > 0
+        else { return nil }
+        var lastContentX: CGFloat?
+        for g in sorted {
+            let isRest = if case .rest = g.semantic { true } else { false }
+            if isNotehead(g.semantic) || isRest { lastContentX = g.geometry.origin.x }
+        }
+        guard let lastContentX else { return nil }
+        let halfStep = anchor.lineSpacing / 2
+        var sharps: [(sa: Int, x: CGFloat)] = []
+        var flats: [(sa: Int, x: CGFloat)] = []
+        for g in sorted where g.geometry.origin.x > lastContentX {
+            guard let alt = accidentalAlteration(g.semantic), alt != 0 else { continue }
+            let sa = Int(((g.geometry.origin.y - anchor.bottomY) / halfStep).rounded())
+            if alt > 0 { sharps.append((sa, g.geometry.origin.x)) } else { flats.append((sa, g.geometry.origin.x)) }
+        }
+        let shift = 2 - anchor.bottomStep
+        let sharpN = ladderPrefixCount(
+            sharps, ladder: trebleSharpLadder.map { $0 + shift }, lineSpacing: anchor.lineSpacing,
+        )
+        let flatN = ladderPrefixCount(
+            flats, ladder: trebleFlatLadder.map { $0 + shift }, lineSpacing: anchor.lineSpacing,
+        )
+        guard max(sharpN, flatN) > 0 else { return nil }
+        return KeySignature(concertKey: sharpN >= flatN ? sharpN : -flatN)
+    }
+
     private static func ladderPrefixCount(
         _ accs: [(sa: Int, x: CGFloat)], ladder: [Int], lineSpacing: CGFloat,
     ) -> Int {

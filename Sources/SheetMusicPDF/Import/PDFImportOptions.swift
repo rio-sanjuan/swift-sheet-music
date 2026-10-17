@@ -179,6 +179,19 @@ public struct PDFImportOptions: Sendable {
     /// order.
     public var omrCouplesByStaves = false
 
+    /// Whether every staff's key signature reading is reported as an `info`
+    /// diagnostic: the one at its system's start, as read — "none" too — and
+    /// the courtesy key signature at its system's end, when there is one.
+    /// Off by default.
+    ///
+    /// The score holds a key signature only where the key changes, so a
+    /// system that read its key again and one that lost it look alike in it.
+    /// A host that checks one system's key against the others — a photo's
+    /// key signatures are a handful of small glyphs, read short or lost a
+    /// system at a time — needs to know which systems read the key, and
+    /// whether a change at a system break was announced before it.
+    public var omrReportsKeyReadings = false
+
     /// TESTING ONLY, INTERNAL. Substitutes the whole glyph-detection stage so the
     /// harness can replay labels or precomputed detections through the product
     /// path. Takes precedence over `omrTileClassifier`. Not `public` for the same
