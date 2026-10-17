@@ -165,6 +165,20 @@ public struct PDFImportOptions: Sendable {
     /// and a beam's 50 points are a few staff spaces long.
     public var omrKeepsBeamsOutOfStaffLines = false
 
+    /// Whether a system whose staves are coupled into parts unlike the
+    /// reference system's still fills the parts staff by staff, from the top,
+    /// rather than part by part. Off by default.
+    ///
+    /// A raster system's coupling comes from a brace glyph the detector sees
+    /// on one system and misses on the next, so a piano reads as one part of
+    /// two staves in one system and two parts of one staff in the next. Part
+    /// by part, the first such system's second staff — or the second part —
+    /// has nowhere to go, and is dropped. On, the reference coupling is the
+    /// one most of the richest systems read, and a system coupled otherwise,
+    /// with no more staves, puts its staves into the reference's slots in
+    /// order.
+    public var omrCouplesByStaves = false
+
     /// TESTING ONLY, INTERNAL. Substitutes the whole glyph-detection stage so the
     /// harness can replay labels or precomputed detections through the product
     /// path. Takes precedence over `omrTileClassifier`. Not `public` for the same

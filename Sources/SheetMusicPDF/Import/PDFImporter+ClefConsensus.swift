@@ -99,8 +99,8 @@ extension PDFImporter {
     /// about (every slot already consistent, or a single system) produces an
     /// empty map and leaves the assembly path untouched.
     ///
-    /// Mirrors `resolveF8vaSlots`' slot routing (`partSlotMapping` +
-    /// `shape.slotsByPartIndex`) so the aggregation lands in the slots the
+    /// Mirrors `resolveF8vaSlots`' slot routing (`staffSlots`) so the
+    /// aggregation lands in the slots the
     /// measures will. A slot absent from some system — an under-full system
     /// missing a part — simply contributes no reading for it, and the
     /// remaining systems still form the sequence.
@@ -119,11 +119,9 @@ extension PDFImporter {
         if let rasterPages, rasterPages.isEmpty { return [:] }
         var readingsBySlot: [Int: [(system: Int, clef: Clef?, eligible: Bool)]] = [:]
         for (sysIndex, system) in systems.enumerated() {
-            let refForSystemPart = partSlotMapping(system: system, shape: shape)
+            let slotsForPart = staffSlots(system: system, shape: shape)
             for (partIdx, importPart) in system.parts.enumerated() {
-                let refIdx = refForSystemPart[partIdx]
-                guard let slots = shape.slotsByPartIndex[refIdx] else { continue }
-                for (slot, importStaff) in zip(slots, importPart.staves) {
+                for (slot, importStaff) in zip(slotsForPart[partIdx], importPart.staves) {
                     readingsBySlot[slot, default: []].append((
                         sysIndex, staffInitialClef(importStaff),
                         rasterPages?.contains(system.pageIndex) ?? true,

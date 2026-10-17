@@ -18,6 +18,9 @@ extension PDFImporter {
         var parts: [Part]
         var slotsByPartIndex: [Int: [Int]]
         var totalStaffSlots: Int
+        /// Whether a system coupled unlike the reference fills the slots
+        /// staff by staff (`staffSlots`, `PDFImportOptions.omrCouplesByStaves`).
+        var couplesByStaves = false
     }
 
     /// Total staff count across all parts in a system.
@@ -42,7 +45,7 @@ extension PDFImporter {
         return spacings[spacings.count / 2]
     }
 
-    static func partShape(from referenceSystem: ImportSystem) -> PartShape {
+    static func partShape(from referenceSystem: ImportSystem, couplesByStaves: Bool = false) -> PartShape {
         var parts: [Part] = []
         var slotsByPartIndex: [Int: [Int]] = [:]
         var nextSlot = 0
@@ -69,7 +72,54 @@ extension PDFImporter {
             parts: parts,
             slotsByPartIndex: slotsByPartIndex,
             totalStaffSlots: nextSlot,
+            couplesByStaves: couplesByStaves,
         )
+    }
+
+    /// The system the part shape is taken from: the first with the most
+    /// staves; by staves (`PDFImportOptions.omrCouplesByStaves`), the first
+    /// of those coupled as most of them are.
+    ///
+    /// A raster page's coupling rests on a brace glyph the detector sees on
+    /// one system and misses on the next, so the richest systems need not
+    /// agree on it, and the first of them is as likely the odd one out as
+    /// any. The coupling most of them read is the likelier one.
+    static func referenceSystem(_ systems: [ImportSystem], couplesByStaves: Bool) -> ImportSystem? {
+        // `max(by:)` keeps the first of equals.
+        guard let richest = systems.max(by: { totalStaves($0) < totalStaves($1) }) else { return nil }
+        guard couplesByStaves else { return richest }
+        let candidates = systems.filter { totalStaves($0) == totalStaves(richest) }
+        var counts: [[Int]: Int] = [:]
+        for system in candidates {
+            counts[system.parts.map(\.staves.count), default: 0] += 1
+        }
+        let most = counts.values.max() ?? 0
+        return candidates.first { counts[$0.parts.map(\.staves.count)] == most }
+    }
+
+    /// For each of `system.parts`, the global staff slots its staves fill, in
+    /// order — `zip` with its staves stops at the shorter.
+    ///
+    /// By part, the default: the slots of the reference part `partSlotMapping`
+    /// maps it to. A system coupled unlike the reference loses staves that
+    /// way: two single-staff parts where the reference has one two-staff part
+    /// put the second staff's music in a part that isn't there, and one part
+    /// of two staves where the reference has two of one each drops its second
+    /// staff. By staves (`shape.couplesByStaves`), a system coupled unlike the
+    /// reference, with no more staves than it has slots, fills the slots
+    /// staff by staff from the top — as `partSlotMapping` fills parts.
+    static func staffSlots(system: ImportSystem, shape: PartShape) -> [[Int]] {
+        let refForSystemPart = partSlotMapping(system: system, shape: shape)
+        let byPart = system.parts.indices.map { shape.slotsByPartIndex[refForSystemPart[$0]] ?? [] }
+        guard shape.couplesByStaves,
+              system.parts.map(\.staves.count) != shape.parts.map(\.staves.count),
+              totalStaves(system) <= shape.totalStaffSlots
+        else { return byPart }
+        var next = 0
+        return system.parts.map { part in
+            defer { next += part.staves.count }
+            return Array(next ..< next + part.staves.count)
+        }
     }
 
     // MARK: - Part → global-slot mapping
@@ -124,11 +174,9 @@ extension PDFImporter {
     ) -> [Int: Clef] {
         var pitchesBySlot: [Int: [Int]] = [:]
         for system in systems {
-            let refForSystemPart = partSlotMapping(system: system, shape: shape)
+            let slotsForPart = staffSlots(system: system, shape: shape)
             for (partIdx, importPart) in system.parts.enumerated() {
-                let refIdx = refForSystemPart[partIdx]
-                guard let slots = shape.slotsByPartIndex[refIdx] else { continue }
-                for (slot, importStaff) in zip(slots, importPart.staves) {
+                for (slot, importStaff) in zip(slotsForPart[partIdx], importPart.staves) {
                     guard staffInitialClefIsF8va(importStaff) else { continue }
                     pitchesBySlot[slot, default: []]
                         .append(contentsOf: f8vaCandidatePitches(staff: importStaff))
@@ -167,11 +215,9 @@ extension PDFImporter {
         var profiles: [Int: [Int]] = [:]
         var excluded = f8vaSlots
         for system in systems {
-            let refForSystemPart = partSlotMapping(system: system, shape: shape)
+            let slotsForPart = staffSlots(system: system, shape: shape)
             for (partIdx, importPart) in system.parts.enumerated() {
-                let refIdx = refForSystemPart[partIdx]
-                guard let slots = shape.slotsByPartIndex[refIdx] else { continue }
-                for (slot, importStaff) in zip(slots, importPart.staves) {
+                for (slot, importStaff) in zip(slotsForPart[partIdx], importPart.staves) {
                     guard !excluded.contains(slot) else { continue }
                     guard let pitches = registerProfilePitches(staff: importStaff)
                     else {

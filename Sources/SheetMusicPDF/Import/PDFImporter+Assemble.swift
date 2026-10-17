@@ -34,10 +34,9 @@ extension PDFImporter {
         // staves than the body), which would otherwise truncate every later
         // system's surplus staves in `appendSystem`'s zip. The richest
         // system is the best single template for the full ensemble.
-        let referenceSystem = systems.max { lhs, rhs in
-            totalStaves(lhs) < totalStaves(rhs)
-        } ?? systems[0]
-        let shape = partShape(from: referenceSystem)
+        let referenceSystem = referenceSystem(systems, couplesByStaves: options.omrCouplesByStaves)
+            ?? systems[0]
+        let shape = partShape(from: referenceSystem, couplesByStaves: options.omrCouplesByStaves)
         // Strip the arrangers' colon-prefixed StaffText performance notes
         // ("Lead:…", "Perc.:…") from the text pool up front, so they can't
         // masquerade as lyric syllables in `attachLyrics`. Page-wide, because
@@ -196,14 +195,12 @@ extension PDFImporter {
         // it routes each present part to the reference slot whose vertical
         // position it matches, so a missing part leaves its slots empty
         // instead of shifting every part up. See `partSlotMapping`.
-        let refForSystemPart = partSlotMapping(system: system, shape: shape)
+        let slotsForPart = staffSlots(system: system, shape: shape)
         for (partIdx, importPart) in system.parts.enumerated() {
-            let refIdx = refForSystemPart[partIdx]
-            guard let slots = shape.slotsByPartIndex[refIdx] else { continue }
             // Defensive: a later system might have extra staves not
             // present in the first system. Ignore the surplus rather
             // than crash.
-            let pairs = zip(slots, importPart.staves)
+            let pairs = zip(slotsForPart[partIdx], importPart.staves)
             for (slot, importStaff) in pairs {
                 let location = "page \(system.pageIndex), system \(sysIndex)"
                 // Nearest staff below this one within the system: the highest
