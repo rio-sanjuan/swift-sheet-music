@@ -17,6 +17,8 @@ This file is the working summary for whoever syncs the fork.
 | | F1's tests, on fixtures FretCodex owns | `Tests/SheetMusicTests/MusicXML/FretCodex*.swift` |
 | **F2** | **Bug fixes from FretCodex's tracker.** MSCX encoder: a whole-bar `.measure` chord is written as its bar's note value instead of trapping (SM-1); a chord or grace takes up to four dots (MuseScore's `MAX_DOTS`), and one no note value spells throws `mscx.encoder.chordDurationNotRepresentable` instead of writing a file nothing reads (SM-2). A voice-level spanner's end side keeps its `<prev><location>` — new `Spanner.prevMeasuresOffset` / `prevFractionsOffset` — so MuseScore can pair a re-saved volta, hairpin or ottava again (SM-4). MusicXML: an `<ending>` decodes into the volta's begin AND end side (SM-15); `<grace>` notes decode into grace chords that take no time (SM-9). The consumer-lite check runs from a checkout of any name (SM-16). See *Volta end sides*, *Graces in MusicXML* and *Writing durations to MSCX* below. | `Sources/SheetMusicCore/Score/Spanner.swift`, `ScoreFingerprint.swift` (doc only); `Sources/SheetMusicMSCX/Decoders/MSCXDecoder+Spanner.swift`; `Sources/SheetMusicMSCX/Encoders/` (`+Chord`, `+NoteDuration`, `+Spanner`, `+Voice+Emit`, `+Voice+EncodeChord`, `+Voice+Helpers`); `Sources/SheetMusicMusicXML/Decoders/` (`+Grace`, `+Measure`, `+MeasureContent`, `+Note`, `MusicXMLDecoder.swift`, `MusicXMLGraceRun.swift`, `MusicXMLVoltaTracker.swift`, `StaffMeasureBuilder.swift`); `Scripts/fretcodex-check-consumer-lite.sh` |
 | | F2's tests; and the preservation gate's allowlist loses two entries F2 made stale (`location/measures`, `prev/location`) | `Tests/SheetMusicTests/MSCX/FretCodexMSCX*.swift`, `Tests/SheetMusicTests/MusicXML/FretCodexMusicXML{Endings,Grace}Tests.swift`; `Tests/SheetMusicTests/MSCXPreservationGateTests.swift` |
+| **F3** | **Photo-reading options for the raster path.** Four `PDFImportOptions`, all off by default, so a parse that sets none reads as before: `omrStemHeadEndTolerance` (the stem gate for one parse; FretCodex sets 0.75 for photos), `omrKeepsBeamsOutOfStaffLines` (a beam's blob split from the lines it joins or refused as a line, SM-26), `omrCouplesByStaves` (a system coupled unlike the reference filled staff by staff, SM-28), `omrReportsKeyReadings` (every system's key reading and courtesy key reported as diagnostics, SM-22). And one fix with no option: a courtesy key past a system's final double barline is no longer dropped with its note-free cell (`ImportMeasure.droppedTrailingGlyphs`, read only by `readCourtesyKey`). Measured through FretCodex's `PageReader` in its ADR 0006, round 2. See *Photo options* below. | `Sources/SheetMusicPDF/Import/` (`PDFImportOptions`, `Internal`, `+Assemble`, `+AssembleParts`, `+ClefConsensus`, `+KeyReader`, `+Layout`, `+RasterFallback`, `+Rhythm`, `+ScoreState`); `Sources/SheetMusicPDF/OMR/RasterFrontEnd.swift`; `Sources/SheetMusicPDF/Raster/` (`RasterPage`, `+StaffLineBlobs`, `+StaffLines`) |
+| | F3's tests | `Tests/SheetMusicTests/FretCodex{OMRStemTolerance,OMRBeamLine,Coupling,KeyReport}Tests.swift` |
 
 **Why F0 exists.** SwiftPM fetches the package dependencies of every target reachable from
 **any product a package declares**, whichever products a consumer actually links. Upstream
@@ -165,6 +167,23 @@ MuseScore's importer:
   4/4, a dotted half in 3/4 — and reads back as that concrete value, not as `.measure`. A bar no
   single value fills (5/4, 4/2) throws the same error; split such a chord into tied chords first.
 
+## Photo options (after F3)
+
+A host reading photographs, not scans, sets these per parse on `PDFImportOptions`; each is off by
+default and changes nothing for vector pages:
+
+- `omrStemHeadEndTolerance: Double?` — how close, in staff spaces, a notehead must sit to an end
+  of a raster vertical for it to be the note's stem (nil: the measured 0.5). A photo's blur moves
+  the two apart; at 0.5 the stem is refused and an eighth read as a quarter. 0.75 costs clean and
+  scanned pages about 0.007 aligned F, so it is not a default.
+- `omrKeepsBeamsOutOfStaffLines: Bool` — a blob a beam joined to the lines is split back into them
+  (`RasterPage.linesInBlob`), and a beam's own blob is not taken for a line (`RasterPage.isBeam`).
+- `omrCouplesByStaves: Bool` — a system whose staves couple into fewer parts than the reference
+  system's (a missed brace) is mapped staff by staff, not by part order, so no staff is dropped.
+- `omrReportsKeyReadings: Bool` — every system's key reading, and the courtesy key at a system's
+  end, is reported through `diagnostics`; a key element is still written only where the key
+  changes, so a host can tell a system that read the key again from one that lost it.
+
 ## Must not change
 
 - `NotatedClef.init(rawType:)` stays non-failable. Unknown clefs collapse to treble; 18 call
@@ -204,6 +223,8 @@ milestone. Take the newest upstream tag at that point.
 - `NotatedClef`;
 - `ScoreView`'s initialiser and `playbackCursor`;
 - `PDFImportOptions` and the OMR types;
+- the raster staff-line blobs, part coupling (`partSlotMapping`) and the key reader's courtesy
+  key, with F3's options and `ImportMeasure.droppedTrailingGlyphs` (F3);
 - the preserved-markup fields on `Staff` and `Note`;
 - the `EID` and `IdentifiedArray` APIs.
 
