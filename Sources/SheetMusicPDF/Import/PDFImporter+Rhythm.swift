@@ -17,6 +17,7 @@ extension PDFImporter {
         paths: [PathSegment],
         tieMarks: TieMarks = TieMarks(),
         graceSizeThreshold: CGFloat = 0,
+        stemHeadEndTolerance: CGFloat = PDFImporter.stemHeadEndToleranceInSpaces,
     ) -> [RhythmElement] {
         var pitchByGlyph: [ClassifiedGlyph: DecodedPitch] = [:]
         for dp in decoded {
@@ -40,7 +41,10 @@ extension PDFImporter {
         // neighbouring staff (~3 staff-heights away centre-to-centre).
         let yBand = staffBeamBand(measure.staffYLines)
         let stems = paths.filter {
-            isStem(in: measure, $0, noteheads: glyphs, spatium: spatium)
+            isStem(
+                in: measure, $0, noteheads: glyphs, spatium: spatium,
+                headEndTolerance: stemHeadEndTolerance,
+            )
                 && segmentOverlapsBand($0, yBand)
         }
         // Beam segments overlapping this measure cell (page-filtered
@@ -331,6 +335,7 @@ extension PDFImporter {
         _ path: PathSegment,
         noteheads: [ClassifiedGlyph],
         spatium: CGFloat,
+        headEndTolerance: CGFloat = PDFImporter.stemHeadEndToleranceInSpaces,
     ) -> Bool {
         guard path.kind == .vertical,
               measure.xRange.contains(path.rect.midX)
@@ -428,7 +433,7 @@ extension PDFImporter {
                 abs(g.geometry.origin.y - path.rect.minY),
                 abs(g.geometry.origin.y - path.rect.maxY),
             )
-            return toEnd <= stemHeadEndToleranceInSpaces * spatium
+            return toEnd <= headEndTolerance * spatium
         }
     }
 
@@ -442,6 +447,9 @@ extension PDFImporter {
     /// halves of one false-positive filter, so they have to be swept as a
     /// GRID off ONE release build; a value large enough to admit every
     /// vertical (999) is how the gate is turned off for a measurement.
+    ///
+    /// A host can set it for one parse (`PDFImportOptions.omrStemHeadEndTolerance`);
+    /// this is the value when it doesn't.
     static let stemHeadEndToleranceInSpaces: CGFloat =
         RasterPage.sweepOverride("OMR_STEM_HEAD_END_TOL_SP").map { CGFloat($0) } ?? 0.5
 

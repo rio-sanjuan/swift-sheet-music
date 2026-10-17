@@ -449,6 +449,8 @@ extension PDFImporter {
         let rhythm = decodeRhythm(
             measure: importMeasure, decoded: decoded, paths: paths, tieMarks: tieMarks,
             graceSizeThreshold: graceSizeThreshold,
+            stemHeadEndTolerance: options.omrStemHeadEndTolerance.map { CGFloat($0) }
+                ?? stemHeadEndToleranceInSpaces,
         )
         // Tuplet marks (the engraved number, plus its bracket when one is
         // drawn) are read BEFORE lyrics so a claimed digit cannot also

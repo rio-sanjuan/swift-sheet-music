@@ -138,6 +138,19 @@ public struct PDFImportOptions: Sendable {
     /// than silently rasterizing a 1x1 page.
     public var omrRenderDPI: Double = 300
 
+    /// How close, in staff spaces, a notehead must sit to one END of a
+    /// raster-detected vertical for that vertical to be the note's stem;
+    /// nil — the default — for the measured 0.5 (see `isStem`).
+    ///
+    /// For a host whose pages are photographs: a camera's blur and a
+    /// straightening's resampling move a stem's end and its notehead apart
+    /// by more than a scan does, and at 0.5 the stem is refused and the
+    /// note read as a quarter or a half. 0.75 is the value measured for
+    /// that through FretCodex's `PageReader`, which sets it for photos only
+    /// — on its clean and scanned pages it costs aligned note F 0.007, so it
+    /// is a per-parse choice, not a new default. Vector pages never read it.
+    public var omrStemHeadEndTolerance: Double?
+
     /// TESTING ONLY, INTERNAL. Substitutes the whole glyph-detection stage so the
     /// harness can replay labels or precomputed detections through the product
     /// path. Takes precedence over `omrTileClassifier`. Not `public` for the same
