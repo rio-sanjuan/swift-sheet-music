@@ -51,7 +51,7 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// Every pass the fork recommends.
     public static let all: BarRepairPasses = [
         // Each pass joins `.all` once measured (ADR 0006, round 3, in FretCodex).
-        .ledgerBand, .dotColumns,
+        .ledgerBand, .dotColumns, .beamRescue, .revertRule,
     ]
 
     /// Each bit's name, for a host that sets passes from text.
