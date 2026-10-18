@@ -50,7 +50,7 @@ extension PDFImporter {
         let yBand = staffBeamBand(measure.staffYLines)
         let barTicks = ticks(Fraction(numerator: bar.ts.numerator, denominator: bar.ts.denominator)) ?? 0
         // The revert rule's referee: a meter read from two stacked digits.
-        let referee = passes.contains(.revertRule) && bar.meterFromDigits
+        let referee = passes.contains(.revertRule) && (bar.meterFromDigits || passes.contains(.revertEverywhere))
         func fits(_ elements: [RhythmElement], _ split: VoiceSplit) -> Int {
             split.groups.count { group in
                 if group.count == 1, elements[group[0]].isRest, elements[group[0]].chord.duration == .whole {

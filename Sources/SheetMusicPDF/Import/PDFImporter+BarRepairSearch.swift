@@ -87,13 +87,23 @@ extension PDFImporter {
             ? legacyAlternatives(order, elements: elements, barTicks: barTicks) : []
         let cap = passes.contains(.threeChanges) && order.count <= 24 ? 3 : 2
         let need = barTicks - total
+        // Upstream's own repair of this voice: it wins a tie it is part of.
+        var upstream = elements
+        reconcileVoiceGroup(
+            indices: group, barLength: Fraction(numerator: ts.numerator, denominator: ts.denominator),
+            spatium: bar.spatium, elements: &upstream, diagnostics: nil, location: "",
+        )
+        var upstreamResult: [Int: NoteDuration] = [:]
+        for m in group where upstream[m].chord.duration != elements[m].chord.duration {
+            upstreamResult[m] = upstream[m].chord.duration
+        }
         guard let best = searchRepair(
             units: units, legacy: legacy, need: need, cap: cap, order: order, elements: elements,
-            barTicks: barTicks, ts: ts,
+            barTicks: barTicks, ts: ts, upstream: upstreamResult,
         ) else {
-            return .unfit("no repair")
+            return .unfit("no repair; " + fitProfile(units, need: need))
         }
-        guard let chosen = best.chosen else { return .unfit("refused tie") }
+        guard let chosen = best.chosen else { return .unfit("refused tie; " + fitProfile(units, need: need)) }
         for unit in chosen {
             for (k, m) in unit.members.enumerated() {
                 elements[m].chord.duration = unit.durations[k]
@@ -102,6 +112,22 @@ extension PDFImporter {
             }
         }
         return .repaired
+    }
+
+    /// The bar's fit profile (diagnostic only): for each change in length one or two
+    /// evidence-backed changes reach, in ticks of `repairTicksPerWhole`, the cheapest cost — what a
+    /// later meter vote would sum over a system's bars. Listed from the length needed outward.
+    static func fitProfile(_ units: [RepairUnit], need: Int) -> String {
+        var cheapest: [Int: Int] = [0: 0]
+        for (a, ua) in units.enumerated() {
+            cheapest[ua.delta] = min(cheapest[ua.delta] ?? .max, ua.cost)
+            for ub in units[(a + 1)...] where compatible(ua, ub) {
+                let delta = ua.delta + ub.delta
+                cheapest[delta] = min(cheapest[delta] ?? .max, ua.cost + ub.cost)
+            }
+        }
+        let listed = cheapest.keys.sorted { (abs($0 - need), $0) < (abs($1 - need), $1) }.prefix(6)
+        return "need \(need); reachable " + listed.map { "\($0)@\(cheapest[$0]!)" }.joined(separator: " ")
     }
 
     // MARK: - Alternatives
@@ -205,8 +231,8 @@ extension PDFImporter {
     /// Upstream's re-valuation, per element: every plain, single- or double-dotted value, a
     /// filled head never a half or longer, a rest or a tuplet member never.
     static func legacyAlternatives(_ order: [Int], elements: [RhythmElement], barTicks: Int) -> [(member: Int, byTicks: [Int: NoteDuration])] {
+        // Plain values only: a dot needs a dot column (P1, or P6's dot alternative).
         let values: [NoteDuration] = [.whole, .half, .quarter, .eighth, .sixteenth, .thirtySecond, .sixtyFourth]
-            + [NoteDuration.half, .quarter, .eighth, .sixteenth].flatMap { [$0.dotted(1), $0.dotted(2)] }
         return order.compactMap { m in
             let e = elements[m]
             guard !e.isRest, !e.inTuplet, let old = ticks(e.chord.duration, bar: barTicks) else { return nil }
@@ -321,6 +347,7 @@ extension PDFImporter {
     static func searchRepair(
         units: [RepairUnit], legacy: [(member: Int, byTicks: [Int: NoteDuration])], need: Int, cap: Int,
         order: [Int], elements: [RhythmElement], barTicks: Int, ts: TimeSignature,
+        upstream: [Int: NoteDuration] = [:],
     ) -> SearchResult? {
         var found: [(cost: Int, count: Int, units: [RepairUnit])] = []
         var bestKey: (Int, Int)?
@@ -378,7 +405,12 @@ extension PDFImporter {
                 if first == nil { first = set }
             }
         }
-        return SearchResult(chosen: distinct.count == 1 ? first : nil)
+        if distinct.count == 1 { return SearchResult(chosen: first) }
+        // Exact ties go to upstream's reading when it is one of them.
+        if !upstream.isEmpty, let index = tied.firstIndex(where: { outcome($0.0) == upstream }) {
+            return SearchResult(chosen: tied[index].0)
+        }
+        return SearchResult(chosen: nil)
     }
 
     private static func outcome(_ set: [RepairUnit]) -> [Int: NoteDuration] {
@@ -391,7 +423,7 @@ extension PDFImporter {
         return out
     }
 
-    private static func compatible(_ a: RepairUnit, _ b: RepairUnit) -> Bool {
+    static func compatible(_ a: RepairUnit, _ b: RepairUnit) -> Bool {
         if a.kind == .tuplet, b.kind == .tuplet { return false }
         return Set(a.members).isDisjoint(with: b.members)
     }

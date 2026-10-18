@@ -47,11 +47,16 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// P4: a column of heads with no stem joins into one chord only when its heads are all black
     /// or all hollow.
     public static let headKindRule = BarRepairPasses(rawValue: 1 << 14)
+    /// For measuring: the revert rule applied under any meter, not only one read from stacked
+    /// digits. Never in `.all`.
+    public static let revertEverywhere = BarRepairPasses(rawValue: 1 << 15)
 
     /// Every pass the fork recommends.
     public static let all: BarRepairPasses = [
         // Each pass joins `.all` once measured (ADR 0006, round 3, in FretCodex).
         .ledgerBand, .dotColumns, .beamRescue, .revertRule, .columnChords, .headKindRule, .voiceRule,
+        .repairSearch, .phantomGroups, .extrapolatedBeams, .stubImpliesPrimary, .legacyFallback,
+        .tupletGroups, .threeChanges,
     ]
 
     /// Each bit's name, for a host that sets passes from text.
@@ -62,6 +67,6 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
         ("extrapolatedBeams", .extrapolatedBeams), ("stubImpliesPrimary", .stubImpliesPrimary),
         ("legacyFallback", .legacyFallback), ("tupletGroups", .tupletGroups),
         ("threeChanges", .threeChanges), ("revertRule", .revertRule),
-        ("headKindRule", .headKindRule),
+        ("headKindRule", .headKindRule), ("revertEverywhere", .revertEverywhere),
     ]
 }
