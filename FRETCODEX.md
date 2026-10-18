@@ -19,6 +19,8 @@ This file is the working summary for whoever syncs the fork.
 | | F2's tests; and the preservation gate's allowlist loses two entries F2 made stale (`location/measures`, `prev/location`) | `Tests/SheetMusicTests/MSCX/FretCodexMSCX*.swift`, `Tests/SheetMusicTests/MusicXML/FretCodexMusicXML{Endings,Grace}Tests.swift`; `Tests/SheetMusicTests/MSCXPreservationGateTests.swift` |
 | **F3** | **Photo-reading options for the raster path.** Four `PDFImportOptions`, all off by default, so a parse that sets none reads as before: `omrStemHeadEndTolerance` (the stem gate for one parse; FretCodex sets 0.75 for photos), `omrKeepsBeamsOutOfStaffLines` (a beam's blob split from the lines it joins or refused as a line, SM-26), `omrCouplesByStaves` (a system coupled unlike the reference filled staff by staff, SM-28), `omrReportsKeyReadings` (every system's key reading and courtesy key reported as diagnostics, SM-22). And one fix with no option: a courtesy key past a system's final double barline is no longer dropped with its note-free cell (`ImportMeasure.droppedTrailingGlyphs`, read only by `readCourtesyKey`). Measured through FretCodex's `PageReader` in its ADR 0006, round 2. See *Photo options* below. | `Sources/SheetMusicPDF/Import/` (`PDFImportOptions`, `Internal`, `+Assemble`, `+AssembleParts`, `+ClefConsensus`, `+KeyReader`, `+Layout`, `+RasterFallback`, `+Rhythm`, `+ScoreState`); `Sources/SheetMusicPDF/OMR/RasterFrontEnd.swift`; `Sources/SheetMusicPDF/Raster/` (`RasterPage`, `+StaffLineBlobs`, `+StaffLines`) |
 | | F3's tests | `Tests/SheetMusicTests/FretCodex{OMRStemTolerance,OMRBeamLine,Coupling,KeyReport}Tests.swift` |
+| **F4** | **A bar repair for raster pages.** `PDFImportOptions.omrBarRepair`, off by default, and `omrBarRepairPasses` (`BarRepairPasses`, one bit a pass, `.all` by default). On, a page the raster fallback read takes a new branch in `buildOneMeasure`: a notehead captured 7 spaces from its staff (P7), dots counted by column in spaces (P1), beam lines counted at each stem's bare end (P3), heads grouped into column chords (P4), one voice split (P5), and a voice that does not sum repaired by the cheapest evidence-backed changes or left as read with a warning (P6). Voice 0's tuplets survive a prepended clef, key or time on that branch (`prependingScoreStateKeepingTuplets`, SM-32). A vector page never takes the branch: with the option on, a vector PDF reads byte for byte as before. `rasterPages` now reaches `buildOneMeasure` and `layoutSystems`. Measured through FretCodex's `PageReader` in its ADR 0006, round 3. See *Bar repair* below. | `Sources/SheetMusicPDF/Import/` (`BarRepairPasses`, `PDFImportOptions`, `+BarRepair`, `+BarRepairEvidence`, `+BarRepairMarks`, `+BarRepairChords`, `+BarRepairVoices`, `+BarRepairSearch`, `+BarRepairProbe`, `+Assemble`, `+Layout`, `+GlyphCapture`, `PDFImporter`, `+TimeReader`; access widened in `Internal`, `+Rhythm`, `+BeamGroups`, `+RhythmReconcile`, `+RhythmReconcileTuplet`, `+Voicing`) |
+| | F4's tests, on bars built by hand and on pieces written for them | `Tests/SheetMusicTests/FretCodexBarRepair{,Unit,Marks,Chords,Search}Tests.swift`, `FretCodexBarRepairFixtures.swift` |
 
 **Why F0 exists.** SwiftPM fetches the package dependencies of every target reachable from
 **any product a package declares**, whichever products a consumer actually links. Upstream
@@ -184,6 +186,31 @@ default and changes nothing for vector pages:
   end, is reported through `diagnostics`; a key element is still written only where the key
   changes, so a host can tell a system that read the key again from one that lost it.
 
+## Bar repair (after F4)
+
+`PDFImportOptions.omrBarRepair` acts on a page the raster fallback read (`rasterPages`), never
+on a vector page. With it on, `buildOneMeasure` hands each bar to `buildRepairedMeasure`
+(`PDFImporter+BarRepair`); with no pass on (`omrBarRepairPasses = []`) that branch is the
+legacy chain exactly. The passes, in order, and whether `.all` takes them:
+
+| Pass | Bit | What it does | In `.all` |
+|---|---|---|---|
+| P7 | `.ledgerBand` | A staff captures a notehead (and its accidental and dot) 7 spaces past its outer line, not 5, still clamped at a neighbouring staff | yes |
+| P4 | `.columnChords` | Heads grouped into columns (0.6 sp in x, a mirrored second across its column's stem); a column is one chord on the stem along every head, or a virtual stem when none was found — unless an up stem holds the upper heads and a down stem the lower (two chords) | yes |
+| | `.headKindRule` | A stemless column's black and hollow heads stay two notes | no |
+| P1 | `.dotColumns` | Each dot owned by the nearest head to its left (0.8–2.2 sp by 0.75 sp), a note's dots its dot columns, at most two | yes |
+| P2 | `.flagsInSpaces` | Flags matched in spaces at the stem's bare end; a flag never shortens a hollow head | no |
+| P3 | `.beamRescue` | A black stemmed note with no beam and no flag takes the beam lines hung from its stem's bare end; a stem the head-end gate refused is kept when a beam reaches its far end | yes |
+| P5 | `.voiceRule` | Two voices only on opposite stems within a space, or a displaced rest | no |
+| P6 | `.repairSearch` | A voice that does not sum: the cheapest set of at most two (three with `.threeChanges`) evidence-backed changes that makes it sum exactly, or left as read with a "bar repair: … does not sum" warning | yes |
+| | `.extrapolatedBeams`, `.stubImpliesPrimary`, `.tupletGroups` | P6's alternatives: a beam line ending just short of the stem; a stub on a stem no full beam reaches; an intact beam group of 3 or 6, spaced as a tuplet and on a beat of a simple meter, as 3:2 or 6:4 | yes |
+| | `.phantomGroups`, `.legacyFallback`, `.threeChanges`, `.revertRule`, `.revertEverywhere` | Measured and left out (see `BarRepairPasses.all`) | no |
+
+On the branch, voice 0's tuplets survive a prepended clef, key or time
+(`prependingScoreStateKeepingTuplets`, FretCodex SM-32), and `recordGeometry` takes the
+placements the voices were built from. `PDFImportOptions.barRepairProbe` (internal) is a
+test-only sink for the geometry the windows were set from.
+
 ## Must not change
 
 - `NotatedClef.init(rawType:)` stays non-failable. Unknown clefs collapse to treble; 18 call
@@ -194,6 +221,8 @@ default and changes nothing for vector pages:
   a file writes back the `<prev><location>` it was read with, where it used to write a bare
   `<prev/>` that MuseScore could not pair. Scores built in code encode as before.)
 - Public initialisers only gain parameters with defaults.
+- With `omrBarRepair` off — the default — every page reads as before F4; with it on, every
+  vector page still does (F4).
 - An end side's `<prev><location>` round-trips (`Spanner.prevMeasuresOffset` /
   `prevFractionsOffset`), and the MSCX encoder never synthesizes an end side (F2).
 - Nothing from `Tests/SheetMusicTests/Resources/` (GPL-3.0 MuseScore fixtures) leaves this
@@ -225,6 +254,11 @@ milestone. Take the newest upstream tag at that point.
 - `PDFImportOptions` and the OMR types;
 - the raster staff-line blobs, part coupling (`partSlotMapping`) and the key reader's courtesy
   key, with F3's options and `ImportMeasure.droppedTrailingGlyphs` (F3);
+- `buildOneMeasure`, `decodeRhythm` and its helpers (`stemCluster`, `applyFlags`, `applyDots`,
+  `buildChordNotes`), `beamLevels`, `reconcileVoiceGroup`, `voiceAssignment`,
+  `prependingScoreState`, `recordGeometry` and `filterGlyphs`, which the bar repair calls or
+  mirrors, and its identity gates (`FretCodexBarRepairTests`: a vector page byte for byte with
+  the repair on; a raster page as before with it off or with no pass) (F4);
 - the preserved-markup fields on `Staff` and `Note`;
 - the `EID` and `IdentifiedArray` APIs.
 
