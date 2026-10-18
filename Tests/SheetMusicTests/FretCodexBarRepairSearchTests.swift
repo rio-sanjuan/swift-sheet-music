@@ -20,6 +20,7 @@
                 let level = n.value == .eighth ? 1 : n.value == .sixteenth ? 2 : 0
                 var stem = StemEvidence(index: i, x: n.x * sp + 7, loY: 100, hiY: 121, bareEndY: 121, up: true, groupRoot: n.group ?? i)
                 stem.levelHint = n.hint
+                stem.anchoredLevel = n.hint
                 stem.fullCount = n.group != nil && lined ? 1 : 0
                 stem.groupSize = notes.filter { $0.group != nil && $0.group == n.group }.count
                 if n.group == nil { stem.groupSize = 1 }
@@ -55,6 +56,17 @@
             #expect(out.prefix(3).allSatisfy { $0.tupletRatio.map { $0 == (2, 3) } ?? false })
             let voices = PDFImporter.voices(out, split: PDFImporter.VoiceSplit(voiceCount: 1, placements: out.indices.map { (0, $0) }))
             #expect(voices[0].tupletSpans.map { [$0.startIndex, $0.endIndex] } == [[0, 2]])
+        }
+
+        @Test func aFlaggedEighthIsNeverLengthenedToFitTheMeterRead() {
+            // A 3/4 bar read under 4/4 (its meter misread): two flagged eighths and two quarters,
+            // a quarter short. Their stems carry no beam line, but the flags are the evidence:
+            // the voice stays as read, and says it does not fit, for mendMeter to weigh.
+            var (elements, bar) = Self.voice([(0, .eighth, 0, nil), (3, .eighth, 0, nil), (6, .quarter, 0, nil), (10, .quarter, 0, nil)])
+            for i in [0, 1] { elements[i].evidence?.levelFromFlag = true }
+            let (out, outcome) = Self.repair(elements, bar, TimeSignature(numerator: 4, denominator: 4))
+            #expect(outcome != .repaired)
+            #expect(out.map(\.chord.duration) == elements.map(\.chord.duration))
         }
 
         @Test func stemsWithNoBeamLineAreNoTuplet() {

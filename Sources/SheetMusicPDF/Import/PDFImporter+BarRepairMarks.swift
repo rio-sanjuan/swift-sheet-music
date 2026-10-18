@@ -169,14 +169,14 @@ extension PDFImporter {
     // MARK: - P3: beam rescue
 
     /// P3. A black, stemmed note read with no beam and no flag takes the beam lines the raster
-    /// found at its stem's bare end (`StemEvidence.levelHint`) — a beam whose middle falls in the
+    /// hung from its stem's bare end (`StemEvidence.anchoredLevel`) — a beam whose middle falls in the
     /// next bar, or one that missed the group test, still counts at this stem.
     static func applyBeamRescue(_ elements: inout [RhythmElement], bar: BarEvidence) {
         for e in elements.indices {
             guard var evidence = elements[e].evidence, evidence.filled, evidence.base == .quarter,
                   let si = evidence.stem, !evidence.virtualStem, evidence.level == 0
             else { continue }
-            let hint = bar.stems[si].levelHint
+            let hint = bar.stems[si].anchoredLevel
             guard hint >= 1 else { continue }
             evidence.level = hint
             evidence.levelFromFlag = false

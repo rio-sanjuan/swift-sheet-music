@@ -30,6 +30,10 @@ struct StemEvidence: Equatable {
     /// Distinct beam lines (0.35 sp apart) covering its x within 0.5 sp, their middle −0.9…+2.9 sp
     /// from the bare end toward the head — counted over every beam overlapping the bar.
     var levelHint = 0
+    /// The same lines counted only as a stack hung from the bare end: the first within 0.75 sp of
+    /// it, each next within 1.1 sp of the one before (beams stack 0.75 sp apart). A line crossing
+    /// the stem halfway along is a neighbour's beam, not this stem's.
+    var anchoredLevel = 0
     /// A beam line ends no more than 3 sp short of it, on the line through its bare end.
     var extrapolated = false
     /// Kept by the beam rescue: refused by the head-end gate, a beam reaching its far end.
@@ -316,6 +320,7 @@ extension PDFImporter {
             out[s.index].groupRoot = rootOf[s.index]
             out[s.index].groupSize = rootOf.count { $0 == rootOf[s.index] }
             out[s.index].levelHint = levelHint(out[s.index], beams: overlapping, spatium: spatium)
+            out[s.index].anchoredLevel = levelHint(out[s.index], beams: overlapping, spatium: spatium, anchored: true)
             if out[s.index].levelHint == 0 {
                 out[s.index].extrapolated = reachesByExtrapolation(out[s.index], beams: overlapping, spatium: spatium)
             }
@@ -340,7 +345,7 @@ extension PDFImporter {
 
     /// The taxonomy's own count of beam lines at a stem (ADR 0006, round 3): lines covering its x
     /// within 0.5 sp whose middle is −0.9…+2.9 sp from its bare end, 0.35 sp apart.
-    static func levelHint(_ s: StemEvidence, beams: [PathSegment], spatium sp: CGFloat) -> Int {
+    static func levelHint(_ s: StemEvidence, beams: [PathSegment], spatium sp: CGFloat, anchored: Bool = false) -> Int {
         let depths = beams.compactMap { beam -> CGFloat? in
             let lo = beam.quad?.xRange.lowerBound ?? beam.rect.minX
             let hi = beam.quad?.xRange.upperBound ?? beam.rect.maxX
@@ -353,6 +358,7 @@ extension PDFImporter {
         var count = 0
         var last = -CGFloat.greatestFiniteMagnitude
         for depth in depths where depth - last > 0.35 * sp {
+            if anchored, count == 0 ? depth > 0.75 * sp : depth - last > 1.1 * sp { break }
             count += 1
             last = depth
         }

@@ -110,7 +110,9 @@ extension PDFImporter {
         var reconciled = elements
         if passes.contains(.repairSearch) {
             for (v, group) in split.groups.enumerated() {
-                let outcome = repairVoice(group, elements: &reconciled, bar: evidence, ts: bar.ts, passes: passes)
+                let probe = bar.options.barRepairProbe.map { sink in { (line: String) in sink(line + " | \(bar.location), voice \(v + 1)") } }
+                let outcome = repairVoice(group, elements: &reconciled, bar: evidence, ts: bar.ts, passes: passes, probe: probe)
+                probe?("OUTCOME \(outcome)")
                 if case let .unfit(why) = outcome {
                     bar.options.diagnostics?(PDFImportDiagnostic(
                         severity: .warning, location: bar.location,
@@ -137,7 +139,10 @@ extension PDFImporter {
         if let probe = bar.options.barRepairProbe {
             for (i, e) in reconciled.enumerated() {
                 let pitches = e.chord.notes.values.map { String($0.pitch) }.joined(separator: "+")
-                let stem = e.evidence?.stem.map { String($0) } ?? (e.evidence?.virtualStem == true ? "virtual" : "-")
+                let stem = e.evidence?.stem.map { s in
+                    let f = evidence.stems[s]
+                    return "\(s) hint \(f.levelHint) full \(f.fullCount) stub \(f.stubCount) root \(f.groupRoot)/\(f.groupSize)"
+                } ?? (e.evidence?.virtualStem == true ? "virtual" : "-")
                 probe("ELEMENT v\(split.placements[i].voice + 1) x \(String(format: "%.2f", e.x / bar.spatium)) "
                     + "y \(String(format: "%.2f", (e.y - staffMidY) / bar.spatium)) \(pitches.isEmpty ? "rest" : pitches) "
                     + "\(e.chord.duration) dir \(e.stemDirection.map { "\($0)" } ?? "-") stem \(stem) | \(bar.location)")

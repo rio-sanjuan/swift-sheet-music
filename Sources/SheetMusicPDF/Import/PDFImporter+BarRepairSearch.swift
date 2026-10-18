@@ -72,7 +72,7 @@ extension PDFImporter {
     /// is changed only on `.repaired`.
     static func repairVoice(
         _ group: [Int], elements: inout [RhythmElement], bar: BarEvidence, ts: TimeSignature,
-        passes: BarRepairPasses,
+        passes: BarRepairPasses, probe: ((String) -> Void)? = nil,
     ) -> SearchOutcome {
         guard !group.isEmpty else { return .sums }
         if normalizeMeasureRest(indices: group, elements: &elements) { return .sums }
@@ -86,6 +86,13 @@ extension PDFImporter {
         let legacy = passes.contains(.legacyFallback)
             ? legacyAlternatives(order, elements: elements, barTicks: barTicks) : []
         let cap = passes.contains(.threeChanges) && order.count <= 24 ? 3 : 2
+        if let probe {
+            let listed = units.map { u in
+                "\(u.kind)[\(u.members.compactMap { order.firstIndex(of: $0) }.map(String.init).joined(separator: ","))]\(u.delta)@\(u.cost)"
+            }
+            probe("UNITS need \(barTicks - total) of \(barTicks): " + listed.joined(separator: " ")
+                + " legacy \(legacy.count)")
+        }
         let need = barTicks - total
         // Upstream's own repair of this voice: it wins a tie it is part of.
         var upstream = elements
@@ -163,9 +170,13 @@ extension PDFImporter {
             }
             let stem = ev.stem.map { bar.stems[$0] }
             if let stem, !ev.virtualStem, ev.filled, ev.base == .quarter {
-                if stem.levelHint != ev.level {
+                // A level from a flag is not the beams' to move (a flagged note has no beam line),
+                // and no line found is no evidence a beamed note is a quarter: never below one.
+                // Up to the lines hung from the bare end; down to the lines counted at it.
+                let hint = ev.level == 0 ? stem.anchoredLevel : stem.levelHint
+                if hint != ev.level, hint >= 1, !ev.levelFromFlag {
                     var alt = ev
-                    alt.level = stem.levelHint
+                    alt.level = hint
                     offer(alt, cost: RepairCost.levelHint)
                 }
                 if passes.contains(.stubImpliesPrimary), stem.stubImpliesPrimary, ev.level < 1 + stem.stubCount {

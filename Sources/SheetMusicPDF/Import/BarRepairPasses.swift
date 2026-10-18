@@ -51,12 +51,14 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// digits. Never in `.all`.
     public static let revertEverywhere = BarRepairPasses(rawValue: 1 << 15)
 
-    /// Every pass the fork recommends.
+    /// Every pass the fork recommends: those that earned their place, each left out in turn,
+    /// through FretCodex's PageReader (its ADR 0006, round 3). Measured and left out: P2
+    /// (`.flagsInSpaces`, no page moved), `.headKindRule`, `.voiceRule`, `.revertRule`,
+    /// `.phantomGroups` (each within noise or worse), `.legacyFallback` and `.threeChanges` (each
+    /// cost note values on the phone level).
     public static let all: BarRepairPasses = [
-        // Each pass joins `.all` once measured (ADR 0006, round 3, in FretCodex).
-        .ledgerBand, .dotColumns, .beamRescue, .revertRule, .columnChords, .headKindRule, .voiceRule,
-        .repairSearch, .phantomGroups, .extrapolatedBeams, .stubImpliesPrimary, .legacyFallback,
-        .tupletGroups, .threeChanges,
+        .ledgerBand, .dotColumns, .beamRescue, .columnChords, .repairSearch, .extrapolatedBeams,
+        .stubImpliesPrimary, .tupletGroups,
     ]
 
     /// Each bit's name, for a host that sets passes from text.

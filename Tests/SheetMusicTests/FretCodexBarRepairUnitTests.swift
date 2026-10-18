@@ -41,7 +41,7 @@
                 [Self.triplet()], clef: Clef(concertClefType: "F"), key: nil, time: nil,
             )
             #expect(leading == 1)
-            #expect(voices[0].tuplets.isEmpty, "upstream drops them: SM-29")
+            #expect(voices[0].tuplets.isEmpty, "upstream drops them (FretCodex SM-32)")
             let (same, _) = PDFImporter.prependingScoreStateKeepingTuplets([Self.triplet()], clef: nil, key: nil, time: nil)
             #expect(same == [Self.triplet()])
         }
