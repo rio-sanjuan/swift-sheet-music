@@ -130,12 +130,25 @@
         @Test(arguments: spatia)
         func aLedgerHeadSixSpacesUpAndFourAndAHalfDownIsItsStaffs(sp: CGFloat) {
             let staff = Self.staff(100, sp: sp)
-            let up = Self.head(y: 100 + 4 * sp + 6 * sp)
+            let upY = 100 + 4 * sp + 6 * sp
+            let up = Self.head(y: upY)
             let down = Self.head(y: 100 - 4.5 * sp)
-            let wide = PDFImporter.filterGlyphs(classified: [up, down], staff: staff, lo: 0, hi: 400, noteheadBandSpaces: 7)
+            // The D7's stem, down from its head toward the staff.
+            let stem = PathSegment(kind: .vertical, rect: CGRect(x: 50, y: upY - 3.5 * sp, width: 0, height: 3.5 * sp),
+                                   lineWidth: 0.1 * sp, pageIndex: 0, quad: nil, detectedFromRaster: true)
+            let wide = PDFImporter.filterGlyphs(classified: [up, down], staff: staff, lo: 0, hi: 400,
+                                                noteheadBandSpaces: 7, verticals: [stem])
             #expect(wide.count == 2)
             let narrow = PDFImporter.filterGlyphs(classified: [up, down], staff: staff, lo: 0, hi: 400)
             #expect(narrow.count == 1, "upstream's 5 spaces keep only the lower one")
+            // Past five spaces a head with no stem toward the staff is not taken: a stray mark.
+            let stray = PDFImporter.filterGlyphs(classified: [up, down], staff: staff, lo: 0, hi: 400, noteheadBandSpaces: 7)
+            #expect(stray.count == 1)
+            // A sharp before the far head, and its dot after it, go with it.
+            let sharp = ClassifiedGlyph(geometry: GlyphGeometry(origin: CGPoint(x: 50 - 1.5 * sp, y: upY), advance: sp, pageIndex: 0),
+                                        semantic: .accidentalSharp)
+            #expect(PDFImporter.filterGlyphs(classified: [up, sharp], staff: staff, lo: 0, hi: 400,
+                                             noteheadBandSpaces: 7, verticals: [stem]).count == 2)
         }
 
         @Test func aHeadInATightGapIsCapturedByOneStaff() {

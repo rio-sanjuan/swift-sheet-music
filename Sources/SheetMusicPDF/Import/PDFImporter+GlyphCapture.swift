@@ -38,6 +38,7 @@ extension PDFImporter {
             -CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude,
         ),
         noteheadBandSpaces: CGFloat? = nil,
+        verticals: [PathSegment] = [],
     ) -> [ClassifiedGlyph] {
         // Vertical capture band around the staff. A fixed ±30pt band
         // bled into the NEIGHBOURING staff on dense vocal scores where
@@ -78,11 +79,37 @@ extension PDFImporter {
         // + x-gate contain any bleed this admits.
         let flagBand = max(lineSpacing * 6, 12)
         // The bar repair's ledger band (F4, `BarRepairPasses.ledgerBand`), raster pages only: a
-        // notehead — with the accidental and the dot that go with it — is captured out to
-        // `noteheadBandSpaces` from the outer line. Five spaces stops a space short of a D7
-        // (6 spaces over a treble staff), and the next system's ink sits about 8.9 spaces off.
-        // Still clamped at the midpoint to a neighbouring staff, so no head is captured twice.
+        // notehead is captured out to `noteheadBandSpaces` from the outer line, with the
+        // accidental before it and the dot after it. Five spaces stops a space short of a D7 (6
+        // spaces over a treble staff). Past the five, a head must hang on a stem running back
+        // toward the staff — a ledger note's — so a stray detection there (a tab staff's figure,
+        // a title's letter in a system's opening) is not taken, nor does it end the opening
+        // where the clef, key and time are read. Still clamped at the midpoint to a neighbouring
+        // staff, so no head is captured twice.
         let headBand = noteheadBandSpaces.map { max(lineSpacing * $0, 6) } ?? band
+        let middle = (top + bottom) / 2
+        func outside(_ g: ClassifiedGlyph) -> Bool {
+            g.geometry.origin.y > top + band || g.geometry.origin.y < bottom - band
+        }
+        func onAStemTowardTheStaff(_ g: ClassifiedGlyph) -> Bool {
+            let o = g.geometry.origin
+            return verticals.contains { v in
+                guard abs(v.rect.midX - o.x) <= stemAttachWindow(spatium: lineSpacing) else { return false }
+                let (near, far) = abs(v.rect.maxY - o.y) < abs(v.rect.minY - o.y)
+                    ? (v.rect.maxY, v.rect.minY) : (v.rect.minY, v.rect.maxY)
+                return abs(near - o.y) <= 0.75 * lineSpacing && abs(far - middle) < abs(near - middle)
+            }
+        }
+        let farHeads = noteheadBandSpaces == nil ? [] : classified.filter {
+            isNotehead($0.semantic) && outside($0) && onAStemTowardTheStaff($0)
+        }
+        func besideAFarHead(_ g: ClassifiedGlyph) -> Bool {
+            farHeads.contains { h in
+                let dx = g.geometry.origin.x - h.geometry.origin.x
+                return abs(g.geometry.origin.y - h.geometry.origin.y) <= 0.75 * lineSpacing
+                    && dx >= -3 * lineSpacing && dx <= 2.5 * lineSpacing
+            }
+        }
         return classified.filter {
             guard $0.geometry.pageIndex == staff.pageIndex,
                   lo <= $0.geometry.origin.x,
@@ -98,7 +125,15 @@ extension PDFImporter {
                 return (bottom - flagBand) <= $0.geometry.origin.y
                     && $0.geometry.origin.y <= (top + flagBand)
             }
-            let reach = Self.belongsToAHead($0.semantic) ? headBand : band
+            var reach = band
+            if noteheadBandSpaces != nil, outside($0) {
+                if isNotehead($0.semantic) {
+                    guard onAStemTowardTheStaff($0) else { return false }
+                    reach = headBand
+                } else if belongsToAHead($0.semantic), besideAFarHead($0) {
+                    reach = headBand
+                }
+            }
             let low = max(bottom - reach, clamp.lower)
             let high = min(top + reach, clamp.upper)
             return low <= $0.geometry.origin.y && $0.geometry.origin.y <= high

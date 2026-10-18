@@ -46,7 +46,10 @@ extension PDFImporter {
             )
             let yRange = systemYRange(staffGroup)
             let bare = ImportSystem(pageIndex: pageIndex, yRange: yRange, parts: parts)
-            return addingMeasures(bare, classified: classified, noteheadBandSpaces: noteheadBandSpaces)
+            return addingMeasures(
+                bare, classified: classified, noteheadBandSpaces: noteheadBandSpaces,
+                verticals: noteheadBandSpaces == nil ? [] : paths.filter { $0.pageIndex == pageIndex && $0.kind == .vertical },
+            )
         }
     }
 
@@ -79,6 +82,7 @@ extension PDFImporter {
     private static func addingMeasures(
         _ system: ImportSystem, classified: [ClassifiedGlyph],
         noteheadBandSpaces: CGFloat? = nil,
+        verticals: [PathSegment] = [],
     ) -> ImportSystem {
         let unionMidXs = systemBarlineUnion(system)
         var parts = system.parts
@@ -103,6 +107,7 @@ extension PDFImporter {
                         bottom: staff.yLines.min() ?? 0, bands: bands,
                     ),
                     noteheadBandSpaces: noteheadBandSpaces,
+                    verticals: verticals,
                 )
             }
         }
@@ -302,6 +307,7 @@ extension PDFImporter {
             -CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude,
         ),
         noteheadBandSpaces: CGFloat? = nil,
+        verticals: [PathSegment] = [],
     ) -> [ImportMeasure] {
         guard splitXs.count >= 2 else { return [] }
         var measures: [ImportMeasure] = []
@@ -311,7 +317,7 @@ extension PDFImporter {
             let hi = splitXs[i + 1]
             let cellGlyphs = filterGlyphs(
                 classified: classified, staff: staff, lo: lo, hi: hi, clamp: bandClamp,
-                noteheadBandSpaces: noteheadBandSpaces,
+                noteheadBandSpaces: noteheadBandSpaces, verticals: verticals,
             )
             measures.append(ImportMeasure(
                 xRange: lo ... hi,
