@@ -10,9 +10,16 @@ import SheetMusicCore
 extension PDFImporter {
     // MARK: - P1: dots by column
 
-    /// A dot's owner: the nearest head to its left with dx 0.5–1.6 sp and |dy| ≤ 0.75 sp.
-    static let dotOwnerDXInSpaces: ClosedRange<CGFloat> = 0.5 ... 1.6
+    /// A dot's owner: the nearest head to its left with dx 0.8–2.2 sp and |dy| ≤ 0.75 sp. The x
+    /// window is set from the dots of bench pages 80–159 (round-3 probe): measured from the head's
+    /// origin they sit 1.2–1.9 sp right (mode 1.6), 878 of 878 inside — upstream's 0.5–1.35 head
+    /// widths stops at 1.6 and misses half of them. In y: 0 for a note in a space, ±0.4–0.6 for one
+    /// on a line.
+    static let dotOwnerDXInSpaces: ClosedRange<CGFloat> = 0.8 ... 2.2
     static let dotOwnerDYInSpaces: CGFloat = 0.75
+    /// P6's looser window for a dot no head owns.
+    static let dotLooseDXInSpaces: ClosedRange<CGFloat> = 0.5 ... 2.6
+    static let dotLooseDYInSpaces: CGFloat = 0.9
     /// Dots within this many spaces in x are one column.
     static let dotColumnInSpaces: CGFloat = 0.3
 
@@ -58,13 +65,13 @@ extension PDFImporter {
                 columns += 1
                 last = x
             }
-            // Relaxed window for P6: an unowned dot 0.3–1.6 head widths right, within 0.9 sp.
+            // Relaxed window for P6: an unowned dot a little further off.
             evidence.dotAdd = unowned.contains { d in
                 evidence.heads.contains { h in
-                    let head = glyphs[h].geometry
-                    let width = head.advance > 0 ? head.advance : 1.18 * sp
-                    let dx = (glyphs[d].geometry.origin.x - head.origin.x) / width
-                    return dx >= 0.3 && dx <= 1.6 && abs(glyphs[d].geometry.origin.y - head.origin.y) <= 0.9 * sp
+                    let head = glyphs[h].geometry.origin
+                    let dot = glyphs[d].geometry.origin
+                    return dotLooseDXInSpaces.contains((dot.x - head.x) / sp)
+                        && abs(dot.y - head.y) <= dotLooseDYInSpaces * sp
                 }
             }
             if apply {
@@ -96,7 +103,11 @@ extension PDFImporter {
     // MARK: - P2: flags in spaces
 
     /// Where a flag's origin may sit from its stem's bare end, in staff spaces: x from the stem,
-    /// positive to the right, and y along the stem.
+    /// positive to the right, and y along the stem. Checked on the flags of bench pages 80–159
+    /// (round-3 probe): a flag of its stem's way sits −0.25…0 sp from the stem in x (all 681), and
+    /// −0.4…0 sp (up) or −0.1…+0.5 sp (down) from the bare end in y; the next flag is 1.1 sp off.
+    /// Upstream's windows, already in spaces, hold them all, so they stay — a 64th's flag needs the
+    /// 1.5 in y.
     static let flagDXInSpaces: ClosedRange<CGFloat> = -0.5 ... 0.5
     static let flagDYInSpaces: CGFloat = 1.5
 
