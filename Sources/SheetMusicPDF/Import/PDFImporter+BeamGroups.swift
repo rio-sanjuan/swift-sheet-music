@@ -256,7 +256,7 @@ extension PDFImporter {
     /// LEFT edge). We pick the stem whose x is nearest one of the stub's two
     /// x-ends AND whose beamed end falls in the stub's band there, breaking
     /// ties by proximity. Returns nil if no stem is plausibly attached.
-    private static func stubOwner(
+    static func stubOwner(
         _ stub: PathSegment, stems: [StemInfo], reach: BeamReach,
     ) -> Int? {
         guard let q = stub.quad else { return nil }
@@ -318,7 +318,7 @@ extension PDFImporter {
     /// The stem end where beams attach: the end farther from the notehead the
     /// stem abuts (within `stemAttachWindow` in x, y nearest either stem
     /// end). `nil` when no notehead abuts the stem.
-    private static func beamedEnd(
+    static func beamedEnd(
         loY: CGFloat, hiY: CGFloat, stemX: CGFloat, noteheads: [CGPoint],
         spatium: CGFloat,
     ) -> CGFloat? {

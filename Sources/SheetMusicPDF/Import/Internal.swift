@@ -312,6 +312,9 @@ struct RhythmElement {
     /// Chord union (or rest glyph) rect — the onset column for this element.
     /// `nil` on the plain `parse` path.
     var onsetRect: PDFElementRect?
+    /// What the bar repair (F4) knows about how this element's value was read, and what else
+    /// the ink allows. Nil on every path but the repair's.
+    var evidence: ElementEvidence?
 
     var isRest: Bool {
         chord.notes.isEmpty

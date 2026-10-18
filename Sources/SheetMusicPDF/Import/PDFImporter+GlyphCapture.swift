@@ -37,6 +37,7 @@ extension PDFImporter {
         clamp: (lower: CGFloat, upper: CGFloat) = (
             -CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude,
         ),
+        noteheadBandSpaces: CGFloat? = nil,
     ) -> [ClassifiedGlyph] {
         // Vertical capture band around the staff. A fixed ±30pt band
         // bled into the NEIGHBOURING staff on dense vocal scores where
@@ -76,6 +77,12 @@ extension PDFImporter {
         // the ~3-staff-height neighbour spacing); applyFlags' own staff-band
         // + x-gate contain any bleed this admits.
         let flagBand = max(lineSpacing * 6, 12)
+        // The bar repair's ledger band (F4, `BarRepairPasses.ledgerBand`), raster pages only: a
+        // notehead — with the accidental and the dot that go with it — is captured out to
+        // `noteheadBandSpaces` from the outer line. Five spaces stops a space short of a D7
+        // (6 spaces over a treble staff), and the next system's ink sits about 8.9 spaces off.
+        // Still clamped at the midpoint to a neighbouring staff, so no head is captured twice.
+        let headBand = noteheadBandSpaces.map { max(lineSpacing * $0, 6) } ?? band
         return classified.filter {
             guard $0.geometry.pageIndex == staff.pageIndex,
                   lo <= $0.geometry.origin.x,
@@ -91,9 +98,17 @@ extension PDFImporter {
                 return (bottom - flagBand) <= $0.geometry.origin.y
                     && $0.geometry.origin.y <= (top + flagBand)
             }
-            let low = max(bottom - band, clamp.lower)
-            let high = min(top + band, clamp.upper)
+            let reach = Self.belongsToAHead($0.semantic) ? headBand : band
+            let low = max(bottom - reach, clamp.lower)
+            let high = min(top + reach, clamp.upper)
             return low <= $0.geometry.origin.y && $0.geometry.origin.y <= high
         }
+    }
+
+    /// A notehead, or the accidental or augmentation dot written beside one.
+    static func belongsToAHead(_ s: SMuFLSemantic) -> Bool {
+        if isNotehead(s) || accidentalAlteration(s) != nil { return true }
+        if case .augmentationDot = s { return true }
+        return false
     }
 }

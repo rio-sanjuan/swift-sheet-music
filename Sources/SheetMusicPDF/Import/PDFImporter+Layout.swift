@@ -31,6 +31,7 @@ extension PDFImporter {
         classified: [ClassifiedGlyph],
         pageIndex: Int,
         ensembleSize: Int? = nil,
+        noteheadBandSpaces: CGFloat? = nil,
     ) -> [ImportSystem] {
         let pageStaves = staves
             .filter { $0.pageIndex == pageIndex }
@@ -45,7 +46,7 @@ extension PDFImporter {
             )
             let yRange = systemYRange(staffGroup)
             let bare = ImportSystem(pageIndex: pageIndex, yRange: yRange, parts: parts)
-            return addingMeasures(bare, classified: classified)
+            return addingMeasures(bare, classified: classified, noteheadBandSpaces: noteheadBandSpaces)
         }
     }
 
@@ -77,6 +78,7 @@ extension PDFImporter {
     /// produce the same measure count.
     private static func addingMeasures(
         _ system: ImportSystem, classified: [ClassifiedGlyph],
+        noteheadBandSpaces: CGFloat? = nil,
     ) -> ImportSystem {
         let unionMidXs = systemBarlineUnion(system)
         var parts = system.parts
@@ -100,6 +102,7 @@ extension PDFImporter {
                         top: staff.yLines.max() ?? 0,
                         bottom: staff.yLines.min() ?? 0, bands: bands,
                     ),
+                    noteheadBandSpaces: noteheadBandSpaces,
                 )
             }
         }
@@ -298,6 +301,7 @@ extension PDFImporter {
         bandClamp: (lower: CGFloat, upper: CGFloat) = (
             -CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude,
         ),
+        noteheadBandSpaces: CGFloat? = nil,
     ) -> [ImportMeasure] {
         guard splitXs.count >= 2 else { return [] }
         var measures: [ImportMeasure] = []
@@ -307,6 +311,7 @@ extension PDFImporter {
             let hi = splitXs[i + 1]
             let cellGlyphs = filterGlyphs(
                 classified: classified, staff: staff, lo: lo, hi: hi, clamp: bandClamp,
+                noteheadBandSpaces: noteheadBandSpaces,
             )
             measures.append(ImportMeasure(
                 xRange: lo ... hi,

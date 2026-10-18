@@ -71,7 +71,7 @@ extension PDFImporter {
     /// a member with no tuplet around it falls back to `<durationType>measure</durationType>` — a form the Chord
     /// decoder rejects, so an exported score containing one cannot be reopened. Emitting the span also lets the layout
     /// engine draw the bracket and number the engraving shows.
-    private static func tuplets(from ratios: [(normal: Int, actual: Int)?]) -> [Tuplet] {
+    static func tuplets(from ratios: [(normal: Int, actual: Int)?]) -> [Tuplet] {
         var out: [Tuplet] = []
         var index = 0
         while index < ratios.count {
@@ -139,7 +139,7 @@ extension PDFImporter {
     /// `RhythmElement` upstream, so two elements at the same x genuinely
     /// represent two voices sounding together. Tolerance ~half a notehead
     /// (3pt) absorbs PDF coordinate jitter.
-    private static func hasCoincidentOnset(_ elements: [RhythmElement]) -> Bool {
+    static func hasCoincidentOnset(_ elements: [RhythmElement]) -> Bool {
         let xs = elements.map(\.x).sorted()
         for i in 1 ..< xs.count where abs(xs[i] - xs[i - 1]) < 3 {
             return true
@@ -162,7 +162,7 @@ extension PDFImporter {
 // MARK: - Voice placement
 
 extension PDFImporter {
-    private static func voiceFor(
+    static func voiceFor(
         _ element: RhythmElement, staffMidY: CGFloat,
     ) -> Int {
         if element.isRest {

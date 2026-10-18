@@ -119,7 +119,7 @@ extension PDFImporter {
 // MARK: - Cluster assembly
 
 extension PDFImporter {
-    private static func makeRest(
+    static func makeRest(
         glyph: ClassifiedGlyph, duration: NoteDuration, spatium: CGFloat,
     ) -> RhythmElement {
         RhythmElement(
@@ -269,7 +269,7 @@ extension PDFImporter {
     /// afterwards is what keeps the lockstep free: `noteRects` follows along
     /// with no index remapping, so the geometry side-car's
     /// `noteIndexInChord` stays correct by construction.
-    private static func buildChordNotes(
+    static func buildChordNotes(
         clusterIndices: [Int],
         glyphs: [ClassifiedGlyph],
         pitchByGlyph: [ClassifiedGlyph: DecodedPitch],
@@ -466,7 +466,7 @@ extension PDFImporter {
         return path.rect.minY <= lo + tol && path.rect.maxY >= hi - tol
     }
 
-    fileprivate struct Cluster {
+    struct Cluster {
         var indices: [Int]
         var stem: PathSegment?
         /// Index of `stem` in the measure's `stems` array (nil when no stem).
@@ -528,7 +528,7 @@ extension PDFImporter {
     /// exactly the 10 notes the 10 same-position mates carried.
     static let chordMirrorMinDYInSpaces: CGFloat = 0.25
 
-    fileprivate static func stemCluster(
+    static func stemCluster(
         startingAt i: Int,
         in glyphs: [ClassifiedGlyph],
         stems: [PathSegment],
@@ -589,7 +589,7 @@ extension PDFImporter {
 // MARK: - Duration helpers
 
 extension PDFImporter {
-    private static func baseDuration(
+    static func baseDuration(
         for sem: SMuFLSemantic,
     ) -> NoteDuration {
         switch sem {
@@ -603,7 +603,7 @@ extension PDFImporter {
     /// Subdivision level a flag glyph encodes: a combined SMuFL flag glyph
     /// carries the FULL level (flag16thUp is a single glyph meaning two
     /// halvings), so map by glyph type, not by counting glyphs.
-    private static func flagLevel(_ s: SMuFLSemantic) -> Int? {
+    static func flagLevel(_ s: SMuFLSemantic) -> Int? {
         switch s {
         case .flag8thUp, .flag8thDown: 1
         case .flag16thUp, .flag16thDown: 2
@@ -690,7 +690,26 @@ extension PDFImporter {
         flagBand: ClosedRange<CGFloat>?,
         spatium: CGFloat,
     ) -> NoteDuration {
-        guard let stem else { return base }
+        let level = flagLevelAttached(
+            glyphs: glyphs, stem: stem, lead: lead, flagBand: flagBand, spatium: spatium,
+        )
+        var d = base
+        for _ in 0 ..< level {
+            d = halve(d)
+        }
+        return d
+    }
+
+    /// The flag level `applyFlags` halves by: the highest level among the flags attached to
+    /// `stem`'s bare end, 0 for none (or no stem).
+    static func flagLevelAttached(
+        glyphs: [ClassifiedGlyph],
+        stem: PathSegment?,
+        lead: ClassifiedGlyph,
+        flagBand: ClosedRange<CGFloat>?,
+        spatium: CGFloat,
+    ) -> Int {
+        guard let stem else { return 0 }
         let stemX = stem.rect.midX
         let noteY = lead.geometry.origin.y
         // The stem's bare (flag-attaching) end is the one FARTHER from the
@@ -735,11 +754,7 @@ extension PDFImporter {
             guard abs(g.geometry.origin.y - bareEnd) <= attachTolY else { continue }
             level = max(level, lvl)
         }
-        var d = base
-        for _ in 0 ..< level {
-            d = halve(d)
-        }
-        return d
+        return level
     }
 
     private static func halve(_ d: NoteDuration) -> NoteDuration {
@@ -779,7 +794,7 @@ extension PDFImporter {
     /// clears the near notehead and its midpoint lands above it. That read
     /// `.up`, and `voiceFor` turns `.up` into voice 1 — so the chord moved
     /// voice.
-    private static func stemDirection(
+    static func stemDirection(
         of stem: PathSegment, noteheadYs: [CGFloat],
     ) -> StemDirection {
         guard let top = noteheadYs.max(), let bottom = noteheadYs.min() else {
@@ -811,6 +826,13 @@ extension PDFImporter {
         glyphs: [ClassifiedGlyph],
         lead: ClassifiedGlyph,
     ) -> NoteDuration {
+        let dotCount = dotCountBeside(glyphs: glyphs, lead: lead)
+        return dotCount > 0 ? duration.dotted(dotCount) : duration
+    }
+
+    /// The augmentation dots `applyDots` counts for a chord led by `lead`: every dot glyph in its
+    /// window, staccatos excluded.
+    static func dotCountBeside(glyphs: [ClassifiedGlyph], lead: ClassifiedGlyph) -> Int {
         var dotCount = 0
         let leadX = lead.geometry.origin.x
         let leadY = lead.geometry.origin.y
@@ -851,7 +873,7 @@ extension PDFImporter {
             if isStaccatoOfSomeNotehead(g, in: glyphs) { continue }
             dotCount += 1
         }
-        return dotCount > 0 ? duration.dotted(dotCount) : duration
+        return dotCount
     }
 
     /// Is this dot glyph really some notehead's STACCATO — i.e. centred
@@ -862,7 +884,7 @@ extension PDFImporter {
     /// and 0.40–0.67 above / below its owner, an augmentation dot 0.83–1.22
     /// across and within 0.25 vertically. The boxes are disjoint, and this
     /// test fires on 0 of the ~1080 real dots in the corpus.
-    private static func isStaccatoOfSomeNotehead(
+    static func isStaccatoOfSomeNotehead(
         _ dot: ClassifiedGlyph, in glyphs: [ClassifiedGlyph],
     ) -> Bool {
         for g in glyphs where isNotehead(g.semantic) {

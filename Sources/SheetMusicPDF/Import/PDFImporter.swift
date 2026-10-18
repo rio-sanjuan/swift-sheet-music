@@ -76,8 +76,12 @@ public enum PDFImporter {
                 classified: classified,
                 pageIndex: page,
                 ensembleSize: ensembleSize,
+                noteheadBandSpaces: ledgerBandSpaces(page: page, options: options, rasterPages: rasterPages),
             )
             systemsAllPages.append(contentsOf: systems)
+            if let probe = options.barRepairProbe, options.omrBarRepair, rasterPages?.contains(page) == true {
+                probeHeads(systems: systems, classified: classified, page: page, probe: probe)
+            }
         }
         guard !systemsAllPages.isEmpty else {
             throw malformedPDF(code: "pdf.staff.noneDetected", message: "PDFImporter: no staff detected on any page")
@@ -121,6 +125,20 @@ public enum PDFImporter {
             rasterPages: rasterPages,
         )
     }
+
+    /// The bar repair's ledger band, in staff spaces, for `page` — nil (the upstream 5 spaces)
+    /// unless the page is a raster page and `BarRepairPasses.ledgerBand` is on (F4).
+    static func ledgerBandSpaces(page: Int, options: PDFImportOptions, rasterPages: Set<Int>?) -> CGFloat? {
+        guard options.omrBarRepair, options.omrBarRepairPasses.contains(.ledgerBand),
+              rasterPages?.contains(page) == true
+        else { return nil }
+        return ledgerBandInSpaces
+    }
+
+    /// How far from its outer line, in staff spaces, a raster page's staff captures a notehead
+    /// under the ledger band: a D7 sits 6 spaces above a treble staff, the next system's ink
+    /// about 8.9 off.
+    static let ledgerBandInSpaces: CGFloat = 7
 
     /// Document-wide ensemble size: the number of staves in one system,
     /// inferred from the per-page detected-staff counts. MuseScore lays a

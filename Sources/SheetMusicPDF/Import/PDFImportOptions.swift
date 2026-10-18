@@ -192,12 +192,30 @@ public struct PDFImportOptions: Sendable {
     /// whether a change at a system break was announced before it.
     public var omrReportsKeyReadings = false
 
+    /// Whether a page read through the raster fallback has its bars repaired from the evidence
+    /// recognition found: notes grouped into chords by column, dots and flags matched in staff
+    /// spaces, beam lines counted at each stem, one voice split, and a voice that does not sum
+    /// to the bar repaired by the cheapest evidence-backed changes — or left as read, with an
+    /// "unfit" diagnostic, when no repair is unique. Off by default. A vector page is never
+    /// touched: with this on, a vector PDF reads byte for byte as with it off.
+    public var omrBarRepair = false
+
+    /// Which of the bar repair's passes run, when `omrBarRepair` is on; `.all` by default. For
+    /// measuring what each pass does.
+    public var omrBarRepairPasses: BarRepairPasses = .all
+
     /// TESTING ONLY, INTERNAL. Substitutes the whole glyph-detection stage so the
     /// harness can replay labels or precomputed detections through the product
     /// path. Takes precedence over `omrTileClassifier`. Not `public` for the same
     /// reason as `disableSMuFLCodepointTier`: a knob whose purpose is to bypass
     /// the real detector cannot be withdrawn once it is API.
     var omrDetector: (any OMRGlyphDetecting)?
+
+    /// TESTING ONLY, INTERNAL. With the bar repair on, receives one line per flag, augmentation
+    /// dot and notehead of each raster page, placed in staff spaces against its stem, head or
+    /// staff — the geometry the round-3 probes fit and check the repair's windows on. Not
+    /// `public` for the same reason as `omrDetector`.
+    var barRepairProbe: (@Sendable (String) -> Void)?
 
     public init() {}
 }

@@ -32,6 +32,24 @@ extension PDFImporter {
         return nil
     }
 
+    /// Whether `readTime` would read its signature from two digits stacked in one column — the
+    /// one reading of a raster time signature the bar repair trusts as a referee
+    /// (`BarRepairPasses.revertRule`). A symbol, a lone digit read as n/4, or no signature: false.
+    static func readsStackedDigits(from glyphs: [ClassifiedGlyph]) -> Bool {
+        for glyph in glyphs {
+            if isLeadingRegionTerminator(glyph.semantic) { return false }
+            switch glyph.semantic {
+            case .timeSignatureCommon, .timeSignatureCutTime: return false
+            case .timeSignatureDigit:
+                let digits = collectDigits(from: glyphs)
+                guard !digits.isEmpty else { return false }
+                return clusterDigitsByX(digits)[0].count >= 2
+            default: continue
+            }
+        }
+        return false
+    }
+
     /// Group digit glyphs by x-cluster (within 3pt). Within a cluster
     /// the higher-y glyph is the numerator and the lower-y glyph is
     /// the denominator. Side-by-side digits (two distinct x-clusters)

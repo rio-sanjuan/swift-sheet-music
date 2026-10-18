@@ -83,6 +83,7 @@ extension PDFImporter {
                 state: &state,
                 options: options,
                 geometry: geometry,
+                rasterPages: rasterPages,
             )
         }
 
@@ -173,7 +174,11 @@ extension PDFImporter {
         state: inout StaffStateMap,
         options: PDFImportOptions,
         geometry: PDFGeometryCollector?,
+        rasterPages: Set<Int>? = nil,
     ) {
+        // The bar repair (F4) reads only pages the raster fallback read, and only when asked.
+        let repairsBars = options.omrBarRepair
+            && (rasterPages?.contains(system.pageIndex) ?? false)
         // One system rect per ImportSystem (its y-range × page width), used
         // to grow a cursor column to full system height and for auto-scroll.
         geometry?.recordSystem(yRange: system.yRange, pageIndex: system.pageIndex)
@@ -230,6 +235,7 @@ extension PDFImporter {
                     location: location,
                     options: options,
                     geometry: geometry,
+                    repairsBars: repairsBars,
                 )
                 stavesContent[slot].append(contentsOf: measures)
                 applyBreaks(
@@ -270,6 +276,8 @@ extension PDFImporter {
         var clef: [Int: Clef] = [:]
         var key: [Int: KeySignature] = [:]
         var time: [Int: TimeSignature] = [:]
+        /// Whether the time signature in force was read from two stacked digits (F4's referee).
+        var timeFromDigits: [Int: Bool] = [:]
     }
 
     /// Rewrite every F8va clef event to the whole-part resolved clef decided
@@ -305,6 +313,7 @@ extension PDFImporter {
         location: String,
         options: PDFImportOptions,
         geometry: PDFGeometryCollector?,
+        repairsBars: Bool = false,
     ) -> [Measure] {
         var events = scoreStateEvents(
             staff: importStaff, texts: [],
@@ -325,6 +334,7 @@ extension PDFImporter {
         var clef = priorClef ?? Clef(concertClefType: "G")
         var key = priorKey ?? KeySignature(concertKey: 0)
         var ts = priorTime ?? TimeSignature(numerator: 4, denominator: 4)
+        var timeFromDigits = state.timeFromDigits[slot] ?? false
 
         var out: [Measure] = []
         for (mi, importMeasure) in importStaff.measures.enumerated() {
@@ -332,6 +342,14 @@ extension PDFImporter {
             let beforeKey = key
             let beforeTime = ts
             (clef, key, ts) = applyEvents(events, atMeasure: mi, clef: clef, key: key, ts: ts)
+            if repairsBars, events.contains(where: {
+                if case let .timeSignature(_, i) = $0 { return i == mi }
+                return false
+            }) {
+                timeFromDigits = readsStackedDigits(from: importMeasure.glyphs.sorted {
+                    $0.geometry.origin.x < $1.geometry.origin.x
+                })
+            }
             // Emit clef / key / time as leading VoiceElements when this
             // measure introduces or CHANGES one relative to the running
             // state. The very first measure of a part (no prior state)
@@ -369,6 +387,8 @@ extension PDFImporter {
                 slot: slot,
                 measureIndexOffset: measureIndexOffset,
                 geometry: geometry,
+                repairsBars: repairsBars,
+                meterFromDigits: timeFromDigits,
             ))
         }
         // Fold a boundary event pointing PAST this system's last measure
@@ -385,6 +405,7 @@ extension PDFImporter {
         state.clef[slot] = clef
         state.key[slot] = key
         state.time[slot] = ts
+        state.timeFromDigits[slot] = timeFromDigits
         return out
     }
 
@@ -442,7 +463,20 @@ extension PDFImporter {
         slot: Int,
         measureIndexOffset: Int,
         geometry: PDFGeometryCollector?,
+        repairsBars: Bool = false,
+        meterFromDigits: Bool = false,
     ) -> Measure {
+        if repairsBars {
+            return buildRepairedMeasure(RepairBar(
+                importMeasure: importMeasure, paths: paths, tieMarks: tieMarks,
+                graceSizeThreshold: graceSizeThreshold, clef: clef, key: key, ts: ts,
+                emitClef: emitClef, emitKey: emitKey, emitTime: emitTime,
+                pageIndex: pageIndex, measureIndex: measureIndex,
+                location: "\(location), measure \(measureIndex)", options: options, slot: slot,
+                measureIndexOffset: measureIndexOffset, geometry: geometry,
+                meterFromDigits: meterFromDigits,
+            ))
+        }
         let decoded = decodePitches(measure: importMeasure, activeClef: clef, activeKey: key)
         let rhythm = decodeRhythm(
             measure: importMeasure, decoded: decoded, paths: paths, tieMarks: tieMarks,
@@ -517,7 +551,7 @@ extension PDFImporter {
     /// them, mirroring how A (mscz) carries them on the measure. Also
     /// reports how many were prepended, which the geometry side-car needs
     /// to keep its element indices aligned with the returned voices.
-    private static func prependingScoreState(
+    static func prependingScoreState(
         _ voices: [Voice],
         clef: Clef?,
         key: KeySignature?,
@@ -534,11 +568,45 @@ extension PDFImporter {
         return (out, leading.count)
     }
 
+    /// `prependingScoreState`, keeping voice 0's tuplets: their endpoints are literal element
+    /// indices (`Voice+TupletEndpoints` resolves them when IDs are minted), so they are shifted
+    /// past the prepended clef, key and time. Upstream rebuilds voice 0 as `Voice(elements:)` and
+    /// drops them, which loses a first bar's — or a signature change's — tuplets; the bar repair
+    /// (F4), which emits tuplets on raster pages, takes this one. The fix belongs upstream too.
+    static func prependingScoreStateKeepingTuplets(
+        _ voices: [Voice],
+        clef: Clef?,
+        key: KeySignature?,
+        time: TimeSignature?,
+    ) -> (voices: [Voice], leadingCount: Int) {
+        var leading: [VoiceElement] = []
+        if let clef { leading.append(.clef(clef)) }
+        if let key { leading.append(.keySignature(key)) }
+        if let time { leading.append(.timeSignature(time)) }
+        var out = voices.isEmpty ? [Voice(elements: [])] : voices
+        if !leading.isEmpty {
+            let shift = leading.count
+            let tuplets = out[0].tuplets.values.map { tuplet in
+                Tuplet(
+                    normalNotes: tuplet.normalNotes, actualNotes: tuplet.actualNotes,
+                    first: shifted(tuplet.first, by: shift), last: shifted(tuplet.last, by: shift),
+                )
+            }
+            out[0] = Voice(elements: leading + out[0].elements.values, tuplets: tuplets)
+        }
+        return (out, leading.count)
+    }
+
+    private static func shifted(_ endpoint: TupletEndpoint, by shift: Int) -> TupletEndpoint {
+        if case let .index(i) = endpoint { return .index(i + shift) }
+        return endpoint
+    }
+
     /// Record per-element + measure-cell geometry for the side-car, using
     /// the SAME `voiceAssignment` permutation `assignVoices` built so each
     /// element's (voiceIndex, elementIndex) matches `finalVoices`. No-op
     /// when `geometry` is `nil` (the plain `parse` path).
-    private static func recordGeometry(
+    static func recordGeometry(
         _ geometry: PDFGeometryCollector?,
         reconciled: [RhythmElement],
         staffMidY: CGFloat,
@@ -547,6 +615,7 @@ extension PDFImporter {
         slot: Int,
         measureIndex: Int,
         pageIndex: Int,
+        placements given: [(voice: Int, position: Int)]? = nil,
     ) {
         guard let geometry else { return }
         geometry.recordMeasureCell(
@@ -555,7 +624,9 @@ extension PDFImporter {
             yLines: importMeasure.staffYLines,
             pageIndex: pageIndex,
         )
-        let placements = voiceAssignment(elements: reconciled, staffMidY: staffMidY)
+        // The bar repair (F4) hands over the placements it built its voices from, so the
+        // side-car cannot re-derive a different split.
+        let placements = given ?? voiceAssignment(elements: reconciled, staffMidY: staffMidY)
         for (i, element) in reconciled.enumerated() {
             guard let onsetRect = element.onsetRect else { continue }
             let p = placements[i]
@@ -575,7 +646,7 @@ extension PDFImporter {
         }
     }
 
-    private static func staffMidline(_ ys: [CGFloat]) -> CGFloat {
+    static func staffMidline(_ ys: [CGFloat]) -> CGFloat {
         guard let lo = ys.first, let hi = ys.last else { return 0 }
         return (lo + hi) / 2
     }

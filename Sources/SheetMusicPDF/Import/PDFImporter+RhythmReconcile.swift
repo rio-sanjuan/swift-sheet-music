@@ -102,7 +102,7 @@ extension PDFImporter {
     /// (stem-up / above-midline ⇒ voice 1, else voice 2). Mirrors
     /// `assignVoices` so reconciliation sees the same per-voice partition
     /// the final `Measure` will carry.
-    private static func voicePartition(_ elements: [RhythmElement]) -> [[Int]] {
+    static func voicePartition(_ elements: [RhythmElement]) -> [[Int]] {
         let xs = elements.map(\.x).sorted()
         var coincident = false
         for i in 1 ..< max(xs.count, 1) where i < xs.count {
@@ -138,7 +138,7 @@ extension PDFImporter {
 
     // MARK: - Per-voice repair
 
-    private static func reconcileVoiceGroup(
+    static func reconcileVoiceGroup(
         indices: [Int],
         barLength: Fraction,
         spatium: CGFloat,
@@ -278,7 +278,7 @@ extension PDFImporter {
         }
     }
 
-    private static func emitUnreconciledWarning(
+    static func emitUnreconciledWarning(
         _ diagnostics: ((PDFImportDiagnostic) -> Void)?,
         location: String,
     ) {

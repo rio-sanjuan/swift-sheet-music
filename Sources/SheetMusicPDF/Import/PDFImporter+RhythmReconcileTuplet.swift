@@ -165,7 +165,7 @@ extension PDFImporter {
     ///      internal gap). A VOICE-ENDING run (no following note) is accepted
     ///      on the metric + uniformity gates ONLY when its spacing is wide
     ///      enough (`≥ tupletRunEndMinGap`) for those gates to be trustworthy.
-    private static func runHasTupletSpacing(
+    static func runHasTupletSpacing(
         run: [Int], ordered: [Int], elements: [RhythmElement], spatium: CGFloat,
     ) -> Bool {
         guard run.count >= 2 else { return false }
