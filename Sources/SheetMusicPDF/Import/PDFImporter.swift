@@ -77,6 +77,7 @@ public enum PDFImporter {
                 pageIndex: page,
                 ensembleSize: ensembleSize,
                 noteheadBandSpaces: ledgerBandSpaces(page: page, options: options, rasterPages: rasterPages),
+                carriesLeadingTime: carriesLeadingTime(page: page, options: options, rasterPages: rasterPages),
             )
             systemsAllPages.append(contentsOf: systems)
             if let probe = options.barRepairProbe, options.omrBarRepair, rasterPages?.contains(page) == true {
@@ -133,6 +134,12 @@ public enum PDFImporter {
               rasterPages?.contains(page) == true
         else { return nil }
         return ledgerBandInSpaces
+    }
+
+    /// Whether `page`'s systems hand a dropped leading cell's time signature to their first bar —
+    /// only on a raster page with `BarRepairPasses.leadingTime` on (F4).
+    static func carriesLeadingTime(page: Int, options: PDFImportOptions, rasterPages: Set<Int>?) -> Bool {
+        options.omrBarRepair && options.omrBarRepairPasses.contains(.leadingTime) && rasterPages?.contains(page) == true
     }
 
     /// How far from its outer line, in staff spaces, a raster page's staff captures a notehead

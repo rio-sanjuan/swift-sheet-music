@@ -32,6 +32,7 @@ extension PDFImporter {
         pageIndex: Int,
         ensembleSize: Int? = nil,
         noteheadBandSpaces: CGFloat? = nil,
+        carriesLeadingTime: Bool = false,
     ) -> [ImportSystem] {
         let pageStaves = staves
             .filter { $0.pageIndex == pageIndex }
@@ -50,6 +51,7 @@ extension PDFImporter {
                 bare, classified: classified, noteheadBandSpaces: noteheadBandSpaces,
                 verticals: noteheadBandSpaces == nil ? [] : paths.filter { $0.pageIndex == pageIndex && $0.kind == .vertical },
                 pageBands: noteheadBandSpaces == nil ? [] : pageStaves.map { (lo: $0.yLines.min() ?? 0, hi: $0.yLines.max() ?? 0) },
+                carriesLeadingTime: carriesLeadingTime,
             )
         }
     }
@@ -85,6 +87,7 @@ extension PDFImporter {
         noteheadBandSpaces: CGFloat? = nil,
         verticals: [PathSegment] = [],
         pageBands: [(lo: CGFloat, hi: CGFloat)] = [],
+        carriesLeadingTime: Bool = false,
     ) -> ImportSystem {
         let unionMidXs = systemBarlineUnion(system)
         var parts = system.parts
@@ -117,7 +120,7 @@ extension PDFImporter {
                 )
             }
         }
-        dropContentFreeNarrowCells(&parts)
+        dropContentFreeNarrowCells(&parts, carryingLeadingTime: carriesLeadingTime)
         return ImportSystem(pageIndex: system.pageIndex, yRange: system.yRange, parts: parts)
     }
 
@@ -174,7 +177,12 @@ extension PDFImporter {
     /// (the barline union), a cell's width and index are identical across
     /// staves, so removing the same index from all of them keeps the count
     /// uniform.
-    private static func dropContentFreeNarrowCells(_ parts: inout [ImportPart]) {
+    ///
+    /// `carryingLeadingTime` (the bar repair's `.leadingTime`, raster pages only): a dropped cell
+    /// with no kept cell before it — a system's opening, cut up by a clef's or a signature's
+    /// stroke taken for a barline — hands its time-signature glyphs, and only those, to the first
+    /// cell kept, so the opening meter is still read. Off, its glyphs are dropped as upstream does.
+    private static func dropContentFreeNarrowCells(_ parts: inout [ImportPart], carryingLeadingTime: Bool = false) {
         let systemHasContent = parts.contains { part in
             part.staves.contains { st in st.measures.contains(where: measureHasContent) }
         }
@@ -211,17 +219,33 @@ extension PDFImporter {
         for p in parts.indices {
             for s in parts[p].staves.indices {
                 var kept: [ImportMeasure] = []
+                var leadingTime: [ClassifiedGlyph] = []
                 for (i, cell) in parts[p].staves[s].measures.enumerated() {
                     if !dropSet.contains(i) {
+                        var cell = cell
+                        if !leadingTime.isEmpty {
+                            cell.glyphs = leadingTime + cell.glyphs
+                            leadingTime = []
+                        }
                         kept.append(cell)
                     } else if !kept.isEmpty {
                         kept[kept.count - 1].droppedTrailingGlyphs += cell.glyphs
+                    } else if carryingLeadingTime {
+                        leadingTime += cell.glyphs.filter { isTimeSignatureGlyph($0.semantic) }
                     }
                 }
                 if !kept.isEmpty {
                     parts[p].staves[s].measures = kept
                 }
             }
+        }
+    }
+
+    /// A time-signature digit, or its common or cut-time symbol.
+    static func isTimeSignatureGlyph(_ s: SMuFLSemantic) -> Bool {
+        switch s {
+        case .timeSignatureDigit, .timeSignatureCommon, .timeSignatureCutTime: true
+        default: false
         }
     }
 

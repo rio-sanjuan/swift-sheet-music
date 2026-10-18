@@ -56,6 +56,11 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// above an intact group's. The third note's stem must point the group's way and its bare end
     /// sit on one of the group's beam lines carried on.
     public static let brokenTuplets = BarRepairPasses(rawValue: 1 << 16)
+    /// A leading cell dropped as content-free and narrow — a clef's or a time signature's stroke
+    /// taken for a barline — hands its time-signature glyphs, and only those, to the first bar
+    /// kept, so a page's opening meter is not lost (FretCodex SM-38). Clef and key glyphs stay
+    /// dropped: carrying them misread two held-out binder pages.
+    public static let leadingTime = BarRepairPasses(rawValue: 1 << 17)
     /// For measuring: with `.repairSearch` off, a voice that does not sum is left as read —
     /// neither P6 nor upstream's repair — so P6's gain can be told from dropping upstream's.
     /// Never in `.all`.
@@ -69,7 +74,7 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// and it can turn a straight bar into a triplet when a stray note leaves it a beat over).
     public static let all: BarRepairPasses = [
         .ledgerBand, .dotColumns, .beamRescue, .columnChords, .repairSearch, .extrapolatedBeams,
-        .stubImpliesPrimary, .tupletGroups,
+        .stubImpliesPrimary, .tupletGroups, .leadingTime,
     ]
 
     /// Each bit's name, for a host that sets passes from text.
@@ -81,6 +86,6 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
         ("legacyFallback", .legacyFallback), ("tupletGroups", .tupletGroups),
         ("threeChanges", .threeChanges), ("revertRule", .revertRule),
         ("headKindRule", .headKindRule), ("revertEverywhere", .revertEverywhere),
-        ("brokenTuplets", .brokenTuplets), ("leaveUnfit", .leaveUnfit),
+        ("brokenTuplets", .brokenTuplets), ("leadingTime", .leadingTime), ("leaveUnfit", .leaveUnfit),
     ]
 }

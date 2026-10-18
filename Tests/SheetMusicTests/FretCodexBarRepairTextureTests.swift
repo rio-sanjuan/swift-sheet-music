@@ -188,5 +188,74 @@
                     return n + chord.lyrics.count
                 }
         }
+
+        // MARK: - The meter: a signature in a dropped leading cell (bench phone #2)
+
+        /// Phone #2's opening: the clef's stroke and the digits' right edge are found as two
+        /// full-height verticals, so the system starts with two narrow cells of no note — dropped,
+        /// and with them the 2/4. With the repair on, the dropped cell's time-signature glyphs (and
+        /// only those) go to the first bar kept; with it off, or on a vector page, nothing changes.
+        @Test(.enabled(if: T.bravuraAvailable))
+        func aSignatureInADroppedLeadingCellReachesTheFirstBar() throws {
+            guard #available(macOS 15.0, iOS 16.0, *) else { return }
+            let written = try FretCodexBarRepairFixtures.triplets()
+            let data = try PDFExporter.export(score: written)
+            func read(_ options: PDFImportOptions, strokes: Bool) throws -> Score {
+                let document = try PDFImporter.openDocument(data)
+                let walk = try PDFImporter.walkDocument(document)
+                var content = walk.content
+                content.paths = content.paths.map {
+                    var path = $0
+                    path.detectedFromRaster = true
+                    return path
+                }
+                content.texts = []
+                content.curves = []
+                if strokes { content.paths += Self.signatureStrokes(content) }
+                return try PDFImporter.buildScore(
+                    pageCount: document.pageCount, walked: content, pageSizes: walk.pageSizes,
+                    documentAttributes: walk.attributes, options: options, rasterPages: Set(0 ..< document.pageCount),
+                )
+            }
+            func firstTime(_ score: Score) -> TimeSignature? {
+                guard let measure = score.parts.values.first?.staves.values.first?.measures.first else { return nil }
+                for element in measure.voices.first?.elements.values ?? [] {
+                    if case let .timeSignature(ts) = element { return ts }
+                }
+                return nil
+            }
+            // As engraved, the meter is read either way.
+            #expect(firstTime(try read(PDFImportOptions(), strokes: false)).map { ($0.numerator, $0.denominator) } ?? (0, 0) == (2, 4))
+            // With the strokes, upstream drops it …
+            let lost = try read(PDFImportOptions(), strokes: true)
+            #expect(firstTime(lost).map { ($0.numerator, $0.denominator) } ?? (0, 0) != (2, 4))
+            // … and the repair carries it, but not the clef or key: the first bar has no clef.
+            let carried = try read(T.repairOn(.all), strokes: true)
+            #expect(firstTime(carried).map { ($0.numerator, $0.denominator) } ?? (0, 0) == (2, 4))
+            // With no pass, the legacy chain exactly.
+            #expect(try read(T.repairOn([]), strokes: true) == lost)
+        }
+
+        /// Two full-height verticals on every staff: at the clef's right edge and at the time
+        /// signature's, where a phone photo's raster front end finds them.
+        static func signatureStrokes(_ content: WalkedContent) -> [PathSegment] {
+            let lines = content.paths.filter { $0.kind == .horizontal }
+            var out: [PathSegment] = []
+            let clefs = content.glyphs.filter { if case .clefG = $0.semantic { return true } else { return false } }
+            let digits = content.glyphs.filter { if case .timeSignatureDigit = $0.semantic { return true } else { return false } }
+            for clef in clefs {
+                guard let digit = digits.filter({ abs($0.geometry.origin.y - clef.geometry.origin.y) < 40 && $0.geometry.pageIndex == clef.geometry.pageIndex })
+                    .min(by: { $0.geometry.origin.x < $1.geometry.origin.x })
+                else { continue }
+                let staffYs = lines.filter { $0.pageIndex == clef.geometry.pageIndex && abs($0.rect.midY - clef.geometry.origin.y) < 30 }
+                    .map(\.rect.midY)
+                guard let lo = staffYs.min(), let hi = staffYs.max(), hi - lo > 10 else { continue }
+                for x in [clef.geometry.origin.x + clef.geometry.advance * 0.95, digit.geometry.origin.x + digit.geometry.advance * 1.1] {
+                    out.append(PathSegment(kind: .vertical, rect: CGRect(x: x, y: lo, width: 0, height: hi - lo),
+                                           lineWidth: 0.8, pageIndex: clef.geometry.pageIndex, quad: nil, detectedFromRaster: true))
+                }
+            }
+            return out
+        }
     }
 #endif
