@@ -134,6 +134,15 @@ extension PDFImporter {
             )
             split = legacySplit(reconciled, staffMidY: staffMidY)
         }
+        if let probe = bar.options.barRepairProbe {
+            for (i, e) in reconciled.enumerated() {
+                let pitches = e.chord.notes.values.map { String($0.pitch) }.joined(separator: "+")
+                let stem = e.evidence?.stem.map { String($0) } ?? (e.evidence?.virtualStem == true ? "virtual" : "-")
+                probe("ELEMENT v\(split.placements[i].voice + 1) x \(String(format: "%.2f", e.x / bar.spatium)) "
+                    + "y \(String(format: "%.2f", (e.y - staffMidY) / bar.spatium)) \(pitches.isEmpty ? "rest" : pitches) "
+                    + "\(e.chord.duration) dir \(e.stemDirection.map { "\($0)" } ?? "-") stem \(stem) | \(bar.location)")
+            }
+        }
         let voiceList = voices(reconciled, split: split)
         let (finalVoices, leadingCount) = prependingScoreStateKeepingTuplets(
             voiceList, clef: bar.emitClef, key: bar.emitKey, time: bar.emitTime,

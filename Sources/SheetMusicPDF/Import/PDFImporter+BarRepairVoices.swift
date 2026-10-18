@@ -50,8 +50,9 @@ extension PDFImporter {
         var twoVoice = false
         outer: for a in notes {
             for b in notes where b > a {
+                let dx = abs(elements[a].x - elements[b].x)
                 guard let ua = direction(elements[a]), let ub = direction(elements[b]), ua != ub else { continue }
-                if abs(elements[a].x - elements[b].x) <= voiceOverlapInSpaces * sp {
+                if dx <= voiceOverlapInSpaces * sp {
                     twoVoice = true
                     break outer
                 }

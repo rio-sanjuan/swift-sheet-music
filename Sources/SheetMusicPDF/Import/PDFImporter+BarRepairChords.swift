@@ -65,8 +65,8 @@ extension PDFImporter {
     }
 
     /// A column whose every head is a second (0.25–0.75 sp) from a head of the column before it,
-    /// within 1.35 sp in x and on no stem of its own but that column's, is that column's mirrored
-    /// head.
+    /// within 1.35 sp in x and on that column's stem (or, with no stem, beside a column with none),
+    /// is that column's mirrored head.
     static func joiningMirroredSeconds(_ columns: [[Int]], _ c: ChordContext, nearest: [Int: Int?]) -> [[Int]] {
         let sp = c.spatium
         var out: [[Int]] = []
@@ -76,7 +76,10 @@ extension PDFImporter {
             let mirrored = column.allSatisfy { h in
                 let g = c.glyphs[h].geometry.origin
                 let ownStem = nearest[h] ?? nil
-                guard ownStem == nil || previousStems.contains(ownStem!) else { return false }
+                // On the column's own stem — or, stemless, beside a column with none: a head with
+                // no stem beside a stemmed note a second away is as likely a second voice.
+                if let ownStem { guard previousStems.contains(ownStem) else { return false } }
+                else { guard previousStems.isEmpty else { return false } }
                 return previous.contains { p in
                     let q = c.glyphs[p].geometry.origin
                     let dy = abs(g.y - q.y)
@@ -98,7 +101,21 @@ extension PDFImporter {
     ) -> [(heads: [Int], stem: Int?)] {
         let sp = c.spatium
         let window = stemAttachWindow(spatium: sp)
-        let ys = column.map { c.glyphs[$0].geometry.origin.y }
+        // The heads' own stems, in index order.
+        let owned = Array(Set(column.compactMap { nearest[$0] ?? nil })).sorted()
+        // Two stems, one up from the upper heads and one down from the lower ones: two chords,
+        // one a voice — a crash over a kick, or two voices a second or a third apart. Checked
+        // before a stem along every head, which a second voice's head half a space off its end
+        // would pass.
+        if owned.count >= 2 {
+            func heads(_ si: Int) -> [CGFloat] { column.filter { nearest[$0] == si }.map { c.glyphs[$0].geometry.origin.y } }
+            func up(_ si: Int) -> Bool { c.stems[si].rect.midY > (heads(si).reduce(0, +) / CGFloat(max(1, heads(si).count))) }
+            let ups = owned.filter(up), downs = owned.filter { !up($0) }
+            let lowestUp = ups.flatMap(heads).min(), highestDown = downs.flatMap(heads).max()
+            if let lowestUp, let highestDown, lowestUp > highestDown {
+                return grouped(column, owned: owned, c, nearest: nearest)
+            }
+        }
         // One found stem along every head: one chord.
         let spanning = c.stems.indices.filter { si in
             let s = c.stems[si]
@@ -114,8 +131,6 @@ extension PDFImporter {
             return (ca, a) < (cb, b)
         }
         if let stem = byCost { return [(column, stem)] }
-        // The heads' own stems, in index order.
-        let owned = Array(Set(column.compactMap { nearest[$0] ?? nil })).sorted()
         if owned.isEmpty {
             // No stem: one chord on a virtual stem — but a black and a hollow head with no stem
             // to share are two notes.
@@ -126,8 +141,13 @@ extension PDFImporter {
             }
             return [(column, nil)]
         }
-        // Heads on their stems; a stemless head joins the stem whose span reaches it, else the
-        // one nearest in y.
+        return grouped(column, owned: owned, c, nearest: nearest)
+    }
+
+    /// A column's heads on their own stems; a stemless head joins the stem nearest it in y.
+    static func grouped(
+        _ column: [Int], owned: [Int], _ c: ChordContext, nearest: [Int: Int?],
+    ) -> [(heads: [Int], stem: Int?)] {
         var groups: [Int: [Int]] = [:]
         for h in column {
             if let own = nearest[h] ?? nil {
@@ -140,7 +160,6 @@ extension PDFImporter {
             }!
             groups[target, default: []].append(h)
         }
-        _ = ys
         return owned.map { (groups[$0] ?? [], $0) }.filter { !$0.heads.isEmpty }
     }
 }

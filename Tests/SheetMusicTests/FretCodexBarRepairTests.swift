@@ -62,7 +62,7 @@
         }
 
         /// Every pass the repair has, whether or not `.all` takes it yet.
-        static let every = BarRepairPasses(BarRepairPasses.names.map(\.pass))
+        nonisolated static let every = BarRepairPasses(BarRepairPasses.names.map(\.pass))
 
         static func repairOn(_ passes: BarRepairPasses = every) -> PDFImportOptions {
             var options = PDFImportOptions()
@@ -119,6 +119,58 @@
             }
         }
 
+        /// `rasterLike` with the front end's streams shuffled first: `buildScore` sorts them into
+        /// one canonical order, so the repair must read the same.
+        static func rasterLike(_ data: Data, options: PDFImportOptions, shuffledWith seed: UInt64) throws -> Score {
+            let document = try PDFImporter.openDocument(data)
+            let walk = try PDFImporter.walkDocument(document)
+            var content = walk.content
+            var rng = SplitMix(seed: seed)
+            content.paths = content.paths.map {
+                var path = $0
+                path.detectedFromRaster = true
+                return path
+            }.shuffled(using: &rng)
+            content.glyphs.shuffle(using: &rng)
+            content.texts = []
+            content.curves = []
+            return try PDFImporter.buildScore(
+                pageCount: document.pageCount, walked: content, pageSizes: walk.pageSizes,
+                documentAttributes: walk.attributes, options: options,
+                rasterPages: Set(0 ..< document.pageCount),
+            )
+        }
+
+        @Test(.enabled(if: bravuraAvailable))
+        func aRasterPageReadsAlikeEveryTimeInAnyOrder() throws {
+            guard #available(macOS 15.0, iOS 16.0, *) else { return }
+            for written in try [FretCodexBarRepairFixtures.study(), FretCodexBarRepairFixtures.triplets()] {
+                let data = try PDFExporter.export(score: written)
+                let first = try Self.mscxWithoutIDs(Self.rasterLike(data, options: Self.repairOn()))
+                for seed in 0 ..< 10 {
+                    #expect(try Self.mscxWithoutIDs(Self.rasterLike(data, options: Self.repairOn())) == first)
+                    #expect(try Self.mscxWithoutIDs(Self.rasterLike(data, options: Self.repairOn(), shuffledWith: UInt64(seed))) == first)
+                }
+            }
+        }
+
+        /// The repair's cost on a dense page: a generous bound for a debug build (the release
+        /// figure is FretCodex's bench time a page).
+        @Test(.enabled(if: bravuraAvailable))
+        func theRepairCostsLittleTime() throws {
+            guard #available(macOS 15.0, iOS 16.0, *) else { return }
+            let data = try PDFExporter.export(score: FretCodexBarRepairFixtures.study())
+            func time(_ options: PDFImportOptions) throws -> Double {
+                let start = DispatchTime.now().uptimeNanoseconds
+                for _ in 0 ..< 5 { _ = try Self.rasterLike(data, options: options) }
+                return Double(DispatchTime.now().uptimeNanoseconds - start) / 5e6
+            }
+            let off = try time(PDFImportOptions())
+            let on = try time(Self.repairOn())
+            print("FretCodex bar repair: \(String(format: "%.1f", on - off)) ms a page over \(String(format: "%.1f", off)) (debug)")
+            #expect(on - off < 50)
+        }
+
         /// Every value, chord and voice of a raster-like page, bar by bar.
         static func describe(_ score: Score) -> [String] {
             guard let staff = score.parts.values.first?.staves.values.first else { return [] }
@@ -134,6 +186,18 @@
             }
         }
 
+        static func dottedBars(_ score: Score) -> Set<Int> {
+            guard let staff = score.parts.values.first?.staves.values.first else { return [] }
+            return Set(staff.measures.indices.filter { i in
+                staff.measures[i].voices.contains { voice in
+                    voice.elements.values.contains { element in
+                        guard case let .chord(chord) = element, case let .fraction(f) = chord.duration else { return false }
+                        return f.numerator == 3 || f.numerator == 7
+                    }
+                }
+            })
+        }
+
         /// The written pieces read back through the repair as engraved: no bar the legacy chain
         /// reads as written is read otherwise.
         @Test(.enabled(if: bravuraAvailable))
@@ -144,7 +208,11 @@
                 let truth = Self.describe(written)
                 let legacy = Self.describe(try Self.rasterLike(data, options: PDFImportOptions()))
                 let repaired = Self.describe(try Self.rasterLike(data, options: Self.repairOn()))
-                for (i, bar) in truth.enumerated() where i < legacy.count && i < repaired.count {
+                // The export draws no augmentation-dot glyph, so a dotted value is read right only by
+                // upstream's evidence-free repair, which the repair's search will not make without a
+                // dot (its "no invented dot" rule): those bars are left out.
+                let dotted = Self.dottedBars(written)
+                for (i, bar) in truth.enumerated() where i < legacy.count && i < repaired.count && !dotted.contains(i) {
                     if legacy[i] == bar {
                         #expect(repaired[i] == bar, "bar \(i + 1): legacy \(legacy[i]) repaired \(repaired[i])")
                     }
