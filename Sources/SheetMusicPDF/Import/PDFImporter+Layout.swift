@@ -49,6 +49,7 @@ extension PDFImporter {
             return addingMeasures(
                 bare, classified: classified, noteheadBandSpaces: noteheadBandSpaces,
                 verticals: noteheadBandSpaces == nil ? [] : paths.filter { $0.pageIndex == pageIndex && $0.kind == .vertical },
+                pageBands: noteheadBandSpaces == nil ? [] : pageStaves.map { (lo: $0.yLines.min() ?? 0, hi: $0.yLines.max() ?? 0) },
             )
         }
     }
@@ -83,6 +84,7 @@ extension PDFImporter {
         _ system: ImportSystem, classified: [ClassifiedGlyph],
         noteheadBandSpaces: CGFloat? = nil,
         verticals: [PathSegment] = [],
+        pageBands: [(lo: CGFloat, hi: CGFloat)] = [],
     ) -> ImportSystem {
         let unionMidXs = systemBarlineUnion(system)
         var parts = system.parts
@@ -108,6 +110,10 @@ extension PDFImporter {
                     ),
                     noteheadBandSpaces: noteheadBandSpaces,
                     verticals: verticals,
+                    farClamp: neighborBandClamp(
+                        top: staff.yLines.max() ?? 0,
+                        bottom: staff.yLines.min() ?? 0, bands: pageBands,
+                    ),
                 )
             }
         }
@@ -308,6 +314,9 @@ extension PDFImporter {
         ),
         noteheadBandSpaces: CGFloat? = nil,
         verticals: [PathSegment] = [],
+        farClamp: (lower: CGFloat, upper: CGFloat) = (
+            -CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude,
+        ),
     ) -> [ImportMeasure] {
         guard splitXs.count >= 2 else { return [] }
         var measures: [ImportMeasure] = []
@@ -317,7 +326,7 @@ extension PDFImporter {
             let hi = splitXs[i + 1]
             let cellGlyphs = filterGlyphs(
                 classified: classified, staff: staff, lo: lo, hi: hi, clamp: bandClamp,
-                noteheadBandSpaces: noteheadBandSpaces, verticals: verticals,
+                noteheadBandSpaces: noteheadBandSpaces, verticals: verticals, farClamp: farClamp,
             )
             measures.append(ImportMeasure(
                 xRange: lo ... hi,

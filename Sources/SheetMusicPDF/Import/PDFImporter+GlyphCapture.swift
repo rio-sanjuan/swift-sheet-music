@@ -39,6 +39,9 @@ extension PDFImporter {
         ),
         noteheadBandSpaces: CGFloat? = nil,
         verticals: [PathSegment] = [],
+        farClamp: (lower: CGFloat, upper: CGFloat) = (
+            -CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude,
+        ),
     ) -> [ClassifiedGlyph] {
         // Vertical capture band around the staff. A fixed ±30pt band
         // bled into the NEIGHBOURING staff on dense vocal scores where
@@ -85,7 +88,11 @@ extension PDFImporter {
         // toward the staff — a ledger note's — so a stray detection there (a tab staff's figure,
         // a title's letter in a system's opening) is not taken, nor does it end the opening
         // where the clef, key and time are read. Still clamped at the midpoint to a neighbouring
-        // staff, so no head is captured twice.
+        // staff, so no head is captured twice — and past the five spaces at the midpoint to every
+        // staff on the page (`farClamp`), not only the system's: another system's voice-2 note on a
+        // stem toward this staff is that system's. Only heads on this page, near this cell, are
+        // far heads a sign may stand beside: FretCodex reads a photo as one PDF page per system,
+        // each laid out alike.
         let headBand = noteheadBandSpaces.map { max(lineSpacing * $0, 6) } ?? band
         let middle = (top + bottom) / 2
         func outside(_ g: ClassifiedGlyph) -> Bool {
@@ -101,7 +108,9 @@ extension PDFImporter {
             }
         }
         let farHeads = noteheadBandSpaces == nil ? [] : classified.filter {
-            isNotehead($0.semantic) && outside($0) && onAStemTowardTheStaff($0)
+            $0.geometry.pageIndex == staff.pageIndex
+                && $0.geometry.origin.x >= lo - 3 * lineSpacing && $0.geometry.origin.x <= hi + 3 * lineSpacing
+                && isNotehead($0.semantic) && outside($0) && onAStemTowardTheStaff($0)
         }
         func besideAFarHead(_ g: ClassifiedGlyph) -> Bool {
             farHeads.contains { h in
@@ -126,16 +135,19 @@ extension PDFImporter {
                     && $0.geometry.origin.y <= (top + flagBand)
             }
             var reach = band
+            var far = false
             if noteheadBandSpaces != nil, outside($0) {
                 if isNotehead($0.semantic) {
                     guard onAStemTowardTheStaff($0) else { return false }
                     reach = headBand
+                    far = true
                 } else if belongsToAHead($0.semantic), besideAFarHead($0) {
                     reach = headBand
+                    far = true
                 }
             }
-            let low = max(bottom - reach, clamp.lower)
-            let high = min(top + reach, clamp.upper)
+            let low = max(bottom - reach, clamp.lower, far ? farClamp.lower : -CGFloat.greatestFiniteMagnitude)
+            let high = min(top + reach, clamp.upper, far ? farClamp.upper : CGFloat.greatestFiniteMagnitude)
             return low <= $0.geometry.origin.y && $0.geometry.origin.y <= high
         }
     }

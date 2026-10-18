@@ -63,7 +63,9 @@
             b.note(x: 40, step: 4, stem: false)
             b.glyph(.noteheadWhole, x: 40.5, y: b.y(-2))
             #expect(Self.columns(b).count == 2)
-            #expect(Self.columns(b, headKind: false).count == 1)
+            // A whole head is a chord of its own even without the head-kind rule (the review's
+            // P4 case): no value both a whole and a black note's.
+            #expect(Self.columns(b, headKind: false).count == 2)
         }
 
         @Test func aCrashOverAKickStaysTwoVoices() {

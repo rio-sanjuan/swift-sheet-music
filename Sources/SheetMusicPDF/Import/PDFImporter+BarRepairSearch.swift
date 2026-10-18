@@ -75,6 +75,8 @@ extension PDFImporter {
         passes: BarRepairPasses, probe: ((String) -> Void)? = nil,
     ) -> SearchOutcome {
         guard !group.isEmpty else { return .sums }
+        // A meter with no positive numerator and denominator never reaches `Fraction`, which traps.
+        guard ts.numerator > 0, ts.denominator > 0 else { return .unfit("no meter to sum to") }
         if normalizeMeasureRest(indices: group, elements: &elements) { return .sums }
         let barTicks = ticks(Fraction(numerator: ts.numerator, denominator: ts.denominator)) ?? 0
         let order = group.sorted { (elements[$0].x, $0) < (elements[$1].x, $1) }
@@ -172,8 +174,10 @@ extension PDFImporter {
             if let stem, !ev.virtualStem, ev.filled, ev.base == .quarter {
                 // A level from a flag is not the beams' to move (a flagged note has no beam line),
                 // and no line found is no evidence a beamed note is a quarter: never below one.
-                // Up to the lines hung from the bare end; down to the lines counted at it.
-                let hint = ev.level == 0 ? stem.anchoredLevel : stem.levelHint
+                // Up only to the lines hung from the bare end — a line crossing the stem halfway
+                // along is a neighbour's — and down to the lines counted at it.
+                let hint = stem.anchoredLevel > ev.level ? stem.anchoredLevel
+                    : stem.levelHint < ev.level ? stem.levelHint : ev.level
                 if hint != ev.level, hint >= 1, !ev.levelFromFlag {
                     var alt = ev
                     alt.level = hint
@@ -219,7 +223,8 @@ extension PDFImporter {
             }
         }
         if passes.contains(.tupletGroups), !isCompound(ts) {
-            units += tupletUnits(order, elements: elements, bar: bar, barTicks: barTicks)
+            units += tupletUnits(order, elements: elements, bar: bar, barTicks: barTicks,
+                                 broken: passes.contains(.brokenTuplets))
         }
         if passes.contains(.phantomGroups) {
             for run in phantomRuns(order, elements: elements, bar: bar) {
@@ -234,9 +239,10 @@ extension PDFImporter {
         return units
     }
 
-    /// n/8 with n a multiple of 3 (6/8, 9/8, 12/8): beamed in threes, never a triplet.
+    /// n/8 (or n/16) with n a multiple of 3 (3/8, 6/8, 9/8, 12/8): beamed in threes, never a
+    /// triplet — the design's rule (e), 3/8 included.
     static func isCompound(_ ts: TimeSignature) -> Bool {
-        ts.denominator >= 8 && ts.numerator > 3 && ts.numerator % 3 == 0
+        ts.denominator >= 8 && ts.numerator % 3 == 0
     }
 
     /// Upstream's re-valuation, per element: every plain, single- or double-dotted value, a
@@ -260,9 +266,15 @@ extension PDFImporter {
     // MARK: - Group alternatives
 
     /// A beam group (by its sorted union-find root) of 3 or 6 equal plain values, every stem with
-    /// a beam line, spaced as a tuplet: scaled 2/3 at cost 2. "Broken": one member's line
-    /// missing, beside the others — a group of 2 or 5 and its neighbour — at cost 3.
-    static func tupletUnits(_ order: [Int], elements: [RhythmElement], bar: BarEvidence, barTicks: Int) -> [RepairUnit] {
+    /// a beam line, spaced as a tuplet: scaled 2/3 at cost 2. With `.brokenTuplets`, a group of 2
+    /// or 5 and the note just before or after it whose line was lost, at cost 3 — only when that
+    /// note is black, unflagged and undotted, would take the group's value from the group's beam
+    /// level, has its stem the group's way, and its bare end on one of the group's beam lines
+    /// carried on (a beam line no further off than the group's own stems are apart). A plain
+    /// quarter beside a beamed pair stands at its own stem's length and is no member.
+    static func tupletUnits(
+        _ order: [Int], elements: [RhythmElement], bar: BarEvidence, barTicks: Int, broken: Bool = false,
+    ) -> [RepairUnit] {
         var out: [RepairUnit] = []
         let notes = order
         func stemOf(_ m: Int) -> StemEvidence? {
@@ -280,11 +292,11 @@ extension PDFImporter {
             if [3, 6].contains(members.count), members.allSatisfy({ stemOf($0).map(lined) ?? false }) {
                 runs.append((members, RepairCost.tuplet))
             }
-            if [2, 5].contains(members.count), members.allSatisfy({ stemOf($0).map(lined) ?? false }) {
-                // The missing member stands just before or after, its stem with no line.
+            if broken, [2, 5].contains(members.count), members.allSatisfy({ stemOf($0).map(lined) ?? false }) {
+                // The missing member stands just before or after.
                 for neighbour in [index - 1, index + members.count] where order.indices.contains(neighbour) {
                     let n = order[neighbour]
-                    guard !elements[n].isRest, let s = stemOf(n), !lined(s) else { continue }
+                    guard brokenMember(n, of: members, elements: elements, bar: bar) else { continue }
                     let run = neighbour < index ? [n] + members : members + [n]
                     runs.append((run, RepairCost.brokenTuplet))
                 }
@@ -304,6 +316,39 @@ extension PDFImporter {
             }
         }
         return out
+    }
+
+    /// Whether `n` is the member of beam group `members` whose line was lost: see `tupletUnits`.
+    static func brokenMember(_ n: Int, of members: [Int], elements: [RhythmElement], bar: BarEvidence) -> Bool {
+        let sp = bar.spatium
+        guard !elements[n].isRest, let ev = elements[n].evidence, !ev.virtualStem, let si = ev.stem,
+              ev.filled, ev.base == .quarter, ev.level == 0, !ev.levelFromFlag, ev.looseFlagLevel == nil, ev.dots == 0
+        else { return false }
+        let s = bar.stems[si]
+        guard s.levelHint == 0, s.fullCount == 0, s.stubCount == 0 else { return false }
+        let memberStems = members.compactMap { m -> StemEvidence? in
+            guard let mev = elements[m].evidence, !mev.virtualStem, let msi = mev.stem else { return nil }
+            return bar.stems[msi]
+        }
+        guard memberStems.count == members.count,
+              let level = members.first.flatMap({ elements[$0].evidence?.level }), level >= 1,
+              members.allSatisfy({ elements[$0].evidence?.level == level }),
+              let up = s.up, memberStems.allSatisfy({ $0.up == up })
+        else { return false }
+        let xs = memberStems.map(\.x).sorted()
+        let spacing = zip(xs.dropFirst(), xs).map { $0 - $1 }.max() ?? 0
+        guard spacing > 0 else { return false }
+        // One of the group's lines — over a member's stem — carried on to this stem's bare end.
+        return bar.beams.contains { beam in
+            let lo = beam.quad?.xRange.lowerBound ?? beam.rect.minX
+            let hi = beam.quad?.xRange.upperBound ?? beam.rect.maxX
+            guard memberStems.contains(where: { $0.x >= lo - 0.5 * sp && $0.x <= hi + 0.5 * sp }) else { return false }
+            let short = s.x < lo ? lo - s.x : s.x - hi
+            guard short > 0.5 * sp, short <= spacing + 0.5 * sp,
+                  let depth = beamDepth(beam, at: s.x, stem: s, extending: true)
+            else { return false }
+            return depth >= -0.5 * sp && depth <= 1.0 * sp
+        }
     }
 
     /// Runs of 3 or more successive black notes on stems one way, read with no beam and no flag,
@@ -439,7 +484,9 @@ extension PDFImporter {
         return Set(a.members).isDisjoint(with: b.members)
     }
 
-    /// A tuplet in `set` must start on a beat of the meter read, counting the set's other changes.
+    /// A tuplet in `set` must start on a beat of the meter read — or, for a tuplet shorter than
+    /// the beat (an eighth triplet in 2/2, a sixteenth triplet in 4/4), on a multiple of its own
+    /// length — counting the set's other changes.
     private static func tupletOnBeat(
         _ set: [RepairUnit], order: [Int], elements: [RhythmElement], barTicks: Int, ts: TimeSignature,
     ) -> Bool {
@@ -450,7 +497,8 @@ extension PDFImporter {
             if m == start { break }
             onset += ticks(changed[m] ?? elements[m].chord.duration, bar: barTicks) ?? 0
         }
-        let beat = repairTicksPerWhole / max(1, ts.denominator)
+        let span = tuplet.durations.compactMap { ticks($0, bar: barTicks) }.reduce(0, +)
+        let beat = min(repairTicksPerWhole / max(1, ts.denominator), span > 0 ? span : .max)
         return beat > 0 && onset % beat == 0
     }
 

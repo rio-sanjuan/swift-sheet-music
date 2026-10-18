@@ -22,6 +22,16 @@ extension PDFImporter {
     static let dotLooseDYInSpaces: CGFloat = 0.9
     /// Dots within this many spaces in x are one column.
     static let dotColumnInSpaces: CGFloat = 0.3
+    /// A double dot's second stands this far right of its first, at its height: MuseScore puts
+    /// it 0.65 sp on (2.33 sp from the head's origin, past the owner window).
+    static let secondDotDXInSpaces: ClosedRange<CGFloat> = 0.4 ... 0.9
+    static let secondDotDYInSpaces: CGFloat = 0.2
+    /// A dot over or under a LATER note's head — x from 0.3 sp before its origin to 1.2 after, y
+    /// 0.35–1.3 sp off it — is that note's staccato, wherever the warp moved it: never an earlier
+    /// note's augmentation dot. A dot of its own stands right of its head, past the next head's
+    /// reach.
+    static let staccatoOverDXInSpaces: ClosedRange<CGFloat> = -0.3 ... 1.2
+    static let staccatoOverDYInSpaces: ClosedRange<CGFloat> = 0.35 ... 1.3
 
     /// P1. Each dot glyph is owned by one head — the nearest to its left in the window, staccatos
     /// excluded — and an element has as many dots as it owns dot COLUMNS (at most 2), never one
@@ -43,18 +53,45 @@ extension PDFImporter {
         }
         var owned: [Int: [Int]] = [:] // element → dot glyphs
         var unowned: [Int] = []
+        /// Whether `dot` stands over or under a head of an element other than `e`, right of `x`.
+        func staccatoOfALaterHead(_ dot: CGPoint, owner e: Int, x: CGFloat) -> Bool {
+            headOwner.contains { h, other in
+                guard other != e else { return false }
+                let head = glyphs[h].geometry.origin
+                guard head.x > x + 0.5 * sp else { return false }
+                return staccatoOverDXInSpaces.contains((dot.x - head.x) / sp)
+                    && staccatoOverDYInSpaces.contains(abs(dot.y - head.y) / sp)
+            }
+        }
         for d in dots {
             let dot = glyphs[d].geometry.origin
             var best: (key: (CGFloat, CGFloat, CGFloat, Int), element: Int)?
+            var staccato = false
             for (h, e) in headOwner {
                 let head = glyphs[h].geometry.origin
                 let dx = (dot.x - head.x) / sp
                 let dy = abs(dot.y - head.y) / sp
                 guard dotOwnerDXInSpaces.contains(dx), dy <= dotOwnerDYInSpaces else { continue }
+                if staccatoOfALaterHead(dot, owner: e, x: head.x) {
+                    staccato = true
+                    continue
+                }
                 let key = (dx * dx + dy * dy, head.x, head.y, h)
                 if best == nil || key < best!.key { best = (key, e) }
             }
-            if let best { owned[best.element, default: []].append(d) } else { unowned.append(d) }
+            if let best { owned[best.element, default: []].append(d) } else if !staccato { unowned.append(d) }
+        }
+        // A double dot's second, past the owner window, chained from the first.
+        for e in owned.keys.sorted() {
+            guard let last = owned[e]?.max(by: { glyphs[$0].geometry.origin.x < glyphs[$1].geometry.origin.x }) else { continue }
+            let first = glyphs[last].geometry.origin
+            if let second = unowned.first(where: { d in
+                let o = glyphs[d].geometry.origin
+                return secondDotDXInSpaces.contains((o.x - first.x) / sp) && abs(o.y - first.y) <= secondDotDYInSpaces * sp
+            }) {
+                owned[e, default: []].append(second)
+                unowned.removeAll { $0 == second }
+            }
         }
         for e in elements.indices {
             guard var evidence = elements[e].evidence else { continue }

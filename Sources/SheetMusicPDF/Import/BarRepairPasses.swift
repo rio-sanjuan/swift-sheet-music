@@ -37,7 +37,8 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     public static let stubImpliesPrimary = BarRepairPasses(rawValue: 1 << 9)
     /// P6: upstream's evidence-free one-note re-valuation, as the dearest last resort.
     public static let legacyFallback = BarRepairPasses(rawValue: 1 << 10)
-    /// P6: an intact beam group of 3 or 6 equal notes may be a triplet or a sextuplet.
+    /// P6: an intact beam group of 3 or 6 equal notes, every stem with a line, may be a triplet
+    /// or a sextuplet.
     public static let tupletGroups = BarRepairPasses(rawValue: 1 << 11)
     /// P6: change sets of three changes, not just one or two.
     public static let threeChanges = BarRepairPasses(rawValue: 1 << 12)
@@ -50,12 +51,22 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// For measuring: the revert rule applied under any meter, not only one read from stacked
     /// digits. Never in `.all`.
     public static let revertEverywhere = BarRepairPasses(rawValue: 1 << 15)
+    /// P6, with `.tupletGroups`: a "broken" group — a beamed 2 or 5 and the black, unflagged,
+    /// undotted note beside it whose line was lost — may be a triplet or a sextuplet, at a cost
+    /// above an intact group's. The third note's stem must point the group's way and its bare end
+    /// sit on one of the group's beam lines carried on.
+    public static let brokenTuplets = BarRepairPasses(rawValue: 1 << 16)
+    /// For measuring: with `.repairSearch` off, a voice that does not sum is left as read —
+    /// neither P6 nor upstream's repair — so P6's gain can be told from dropping upstream's.
+    /// Never in `.all`.
+    public static let leaveUnfit = BarRepairPasses(rawValue: 1 << 18)
 
     /// Every pass the fork recommends: those that earned their place, each left out in turn,
     /// through FretCodex's PageReader (its ADR 0006, round 3). Measured and left out: P2
     /// (`.flagsInSpaces`, no page moved), `.headKindRule`, `.voiceRule`, `.revertRule`,
     /// `.phantomGroups` (each within noise or worse), `.legacyFallback` and `.threeChanges` (each
-    /// cost note values on the phone level).
+    /// cost note values on the phone level), and `.brokenTuplets` (under the drop rule's margin,
+    /// and it can turn a straight bar into a triplet when a stray note leaves it a beat over).
     public static let all: BarRepairPasses = [
         .ledgerBand, .dotColumns, .beamRescue, .columnChords, .repairSearch, .extrapolatedBeams,
         .stubImpliesPrimary, .tupletGroups,
@@ -70,5 +81,6 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
         ("legacyFallback", .legacyFallback), ("tupletGroups", .tupletGroups),
         ("threeChanges", .threeChanges), ("revertRule", .revertRule),
         ("headKindRule", .headKindRule), ("revertEverywhere", .revertEverywhere),
+        ("brokenTuplets", .brokenTuplets), ("leaveUnfit", .leaveUnfit),
     ]
 }

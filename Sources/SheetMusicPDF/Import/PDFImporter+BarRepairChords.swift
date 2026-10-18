@@ -40,8 +40,10 @@ extension PDFImporter {
                 columns.append([h])
             }
         }
+        // A whole or double-whole head has no stem by nature: it never takes one, so a stem
+        // beside it — another voice's — cannot pull it into its chord.
         let nearest: [Int: Int?] = Dictionary(uniqueKeysWithValues: heads.map { h in
-            (h, nearestStem(
+            (h, isStemlessHead(c.glyphs[h].semantic) ? nil : nearestStem(
                 toX: c.glyphs[h].geometry.origin.x, noteY: c.glyphs[h].geometry.origin.y,
                 stems: c.stems, spatium: sp,
             )?.index)
@@ -95,8 +97,29 @@ extension PDFImporter {
         return out
     }
 
-    /// The chords a column of heads makes, each with its stem (nil: none found).
+    /// A whole, double-whole or x-whole head: one written with no stem.
+    static func isStemlessHead(_ s: SMuFLSemantic) -> Bool {
+        switch s {
+        case .noteheadWhole, .noteheadDoubleWhole, .noteheadXWhole: true
+        default: false
+        }
+    }
+
+    /// The chords a column of heads makes, each with its stem (nil: none found). Its whole notes
+    /// are a chord of their own, on no stem: a whole note under another voice's quarter is a
+    /// second voice, never that quarter's head.
     static func chordsOfColumn(
+        _ column: [Int], _ c: ChordContext, nearest: [Int: Int?], passes: BarRepairPasses,
+    ) -> [(heads: [Int], stem: Int?)] {
+        let wholes = column.filter { isStemlessHead(c.glyphs[$0].semantic) }
+        if !wholes.isEmpty {
+            let rest = column.filter { !isStemlessHead(c.glyphs[$0].semantic) }
+            return [(wholes, nil)] + (rest.isEmpty ? [] : stemmedChordsOfColumn(rest, c, nearest: nearest, passes: passes))
+        }
+        return stemmedChordsOfColumn(column, c, nearest: nearest, passes: passes)
+    }
+
+    private static func stemmedChordsOfColumn(
         _ column: [Int], _ c: ChordContext, nearest: [Int: Int?], passes: BarRepairPasses,
     ) -> [(heads: [Int], stem: Int?)] {
         let sp = c.spatium

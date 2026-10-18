@@ -14,6 +14,10 @@ extension PDFImporter {
     /// Everything `buildOneMeasure` knows about one bar, for the repair.
     struct RepairBar {
         var importMeasure: ImportMeasure
+        /// The page's text — an OCR layer a scanned PDF keeps (`applyRasterFallback`): tuplet
+        /// numerals and lyrics, read as the legacy chain reads them.
+        var texts: [TextGlyph] = []
+        var nextStaffTopY: CGFloat?
         var paths: [PathSegment]
         var tieMarks: TieMarks
         var graceSizeThreshold: CGFloat
@@ -72,11 +76,12 @@ extension PDFImporter {
                 graceSizeThreshold: bar.graceSizeThreshold, stemHeadEndTolerance: bar.stemHeadEndTolerance,
                 passes: chosen,
             )
-            guard !passes.isEmpty else { return (elements, evidence) }
-            // P1 and P2 follow the ink alone; off, they still mark P6's alternatives.
-            applyDotColumns(&elements, bar: evidence, apply: passes.contains(.dotColumns))
-            applyFlagsInSpaces(&elements, bar: evidence, flagBand: yBand, apply: passes.contains(.flagsInSpaces))
-            return (elements, evidence)
+            if !passes.isEmpty {
+                // P1 and P2 follow the ink alone; off, they still mark P6's alternatives.
+                applyDotColumns(&elements, bar: evidence, apply: passes.contains(.dotColumns))
+                applyFlagsInSpaces(&elements, bar: evidence, flagBand: yBand, apply: passes.contains(.flagsInSpaces))
+            }
+            return (readingText(bar, elements), evidence)
         }
         var (elements, evidence) = decode(columns: false)
         if let probe = bar.options.barRepairProbe {
@@ -121,6 +126,8 @@ extension PDFImporter {
                     ))
                 }
             }
+        } else if passes.contains(.leaveUnfit) {
+            // Measuring only: no repair of any kind.
         } else if ownSplit {
             let barLength = Fraction(numerator: bar.ts.numerator, denominator: bar.ts.denominator)
             for group in split.groups {
@@ -161,11 +168,26 @@ extension PDFImporter {
         return Measure(voices: finalVoices)
     }
 
-    /// The legacy chain after the rhythm decode: upstream's repair, voices and prepend.
+    /// The legacy chain's text steps on a bar's elements: tuplet numerals read before lyrics, so a
+    /// numeral is no syllable, and both before any repair, so it sees the tuplets the page wrote.
+    /// A page with no text — every page FretCodex's `PageReader` makes — is unchanged.
+    static func readingText(_ bar: RepairBar, _ elements: [RhythmElement]) -> [RhythmElement] {
+        guard !bar.texts.isEmpty else { return elements }
+        let measure = bar.importMeasure
+        let marks = detectTupletMarks(
+            texts: bar.texts, paths: bar.paths, staffYLines: measure.staffYLines, xRange: measure.xRange,
+            pageIndex: bar.pageIndex,
+        )
+        let withLyrics = attachLyrics(
+            elements: elements, texts: bar.texts, staffYLines: measure.staffYLines, pageIndex: bar.pageIndex,
+            xRange: measure.xRange, nextStaffTopY: bar.nextStaffTopY, excludingOrigins: marks.map(\.digitOrigin),
+        )
+        return applyTupletMarks(elements: withLyrics, marks: marks, spatium: bar.spatium)
+    }
+
+    /// The legacy chain after the rhythm decode and its text: upstream's repair, voices and prepend.
     private static func legacyTail(_ bar: RepairBar, elements rhythm: [RhythmElement], staffMidY: CGFloat) -> Measure {
         let measure = bar.importMeasure
-        // A raster page carries no text, so no tuplet mark and no lyric: the legacy chain's
-        // `detectTupletMarks` / `attachLyrics` / `applyTupletMarks` are no-ops here.
         let reconciled = reconcileMeasureDurations(
             elements: rhythm, timeSignature: bar.ts, spatium: bar.spatium,
             diagnostics: bar.options.diagnostics, location: bar.location,

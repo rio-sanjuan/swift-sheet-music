@@ -466,9 +466,11 @@ extension PDFImporter {
         repairsBars: Bool = false,
         meterFromDigits: Bool = false,
     ) -> Measure {
-        if repairsBars {
+        // A meter with no positive numerator and denominator takes the legacy chain, whose
+        // reconciliation guards it.
+        if repairsBars, ts.numerator > 0, ts.denominator > 0 {
             return buildRepairedMeasure(RepairBar(
-                importMeasure: importMeasure, paths: paths, tieMarks: tieMarks,
+                importMeasure: importMeasure, texts: texts, nextStaffTopY: nextStaffTopY, paths: paths, tieMarks: tieMarks,
                 graceSizeThreshold: graceSizeThreshold, clef: clef, key: key, ts: ts,
                 emitClef: emitClef, emitKey: emitKey, emitTime: emitTime,
                 pageIndex: pageIndex, measureIndex: measureIndex,
