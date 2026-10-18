@@ -51,7 +51,11 @@ extension PDFImporter {
         columns = joiningMirroredSeconds(columns, c, nearest: nearest)
         for column in columns {
             for chord in chordsOfColumn(column, c, nearest: nearest, passes: passes) {
-                let lead = chord.heads.min { headKey(c.glyphs[$0], $0) < headKey(c.glyphs[$1], $1) } ?? chord.heads[0]
+                // On a stem, a head read as whole never sets the value: the stem says it is not one.
+                let candidates = chord.stem == nil ? chord.heads
+                    : chord.heads.filter { !isStemlessHead(c.glyphs[$0].semantic) }
+                let lead = (candidates.isEmpty ? chord.heads : candidates)
+                    .min { headKey(c.glyphs[$0], $0) < headKey(c.glyphs[$1], $1) } ?? chord.heads[0]
                 elements.append(chordElement(
                     lead: lead, cluster: chord.heads.sorted(), stemIndex: chord.stem,
                     virtual: chord.stem == nil && chord.heads.count > 1, c,
@@ -114,9 +118,27 @@ extension PDFImporter {
         let wholes = column.filter { isStemlessHead(c.glyphs[$0].semantic) }
         if !wholes.isEmpty {
             let rest = column.filter { !isStemlessHead(c.glyphs[$0].semantic) }
+            // Unless a found stem runs along every head, the whole-classified ones ON it (within
+            // a quarter space of its span, where a chord's end head sits): then the "whole" is a
+            // misread head of that chord — no stemmed chord has a whole — and joins it.
+            if !rest.isEmpty, let stem = stemAlongEvery(rest, wholes: wholes, c) { return [(column, stem)] }
             return [(wholes, nil)] + (rest.isEmpty ? [] : stemmedChordsOfColumn(rest, c, nearest: nearest, passes: passes))
         }
         return stemmedChordsOfColumn(column, c, nearest: nearest, passes: passes)
+    }
+
+    /// A stem along every head of `heads` (as `stemmedChordsOfColumn`'s spanning test) with each
+    /// of `wholes` within a quarter space of its span.
+    private static func stemAlongEvery(_ heads: [Int], wholes: [Int], _ c: ChordContext) -> Int? {
+        let sp = c.spatium
+        let window = stemAttachWindow(spatium: sp)
+        func along(_ s: PathSegment, _ h: Int, slack: CGFloat) -> Bool {
+            let o = c.glyphs[h].geometry.origin
+            return abs(s.rect.midX - o.x) <= window && o.y >= s.rect.minY - slack * sp && o.y <= s.rect.maxY + slack * sp
+        }
+        return c.stems.indices.first { si in
+            heads.allSatisfy { along(c.stems[si], $0, slack: 0.75) } && wholes.allSatisfy { along(c.stems[si], $0, slack: 0.25) }
+        }
     }
 
     private static func stemmedChordsOfColumn(

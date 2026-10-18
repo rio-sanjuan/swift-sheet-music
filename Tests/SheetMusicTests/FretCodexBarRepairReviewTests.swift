@@ -153,6 +153,22 @@
             #expect(elements.count == 5)
         }
 
+        /// A half-note chord whose lower head the detector read as whole, on the chord's own stem:
+        /// one chord, a half — the stem says the head is no whole.
+        @Test func aWholeReadHeadOnAChordsStemStaysInTheChord() {
+            let sp: CGFloat = 6
+            var b = RepairBarBuilder(sp: sp)
+            b.note(x: 40, step: 4, filled: false)
+            b.glyph(.noteheadWhole, x: 40, y: b.y(0))
+            // The stem runs up from the lower head through the upper.
+            b.paths.append(PathSegment(kind: .vertical, rect: CGRect(x: 40 + 1.18 * sp, y: b.y(0), width: 0, height: b.y(4) - b.y(0) + 3.5 * sp),
+                                       lineWidth: 0.1 * sp, pageIndex: 0, quad: nil, detectedFromRaster: true))
+            let (elements, _) = b.decode([.columnChords])
+            #expect(elements.count == 1)
+            #expect(elements.first?.chord.duration == .half)
+            #expect(elements.first?.chord.notes.count == 2)
+        }
+
         // MARK: - P1: double dots and staccatos
 
         /// A double-dotted quarter: its second dot sits 2.33 spaces from the head's origin, past the
