@@ -33,12 +33,14 @@ extension PDFImporter {
         ensembleSize: Int? = nil,
         noteheadBandSpaces: CGFloat? = nil,
         carriesLeadingTime: Bool = false,
+        systemBands: [ClosedRange<Double>]? = nil,
     ) -> [ImportSystem] {
         let pageStaves = staves
             .filter { $0.pageIndex == pageIndex }
             .sorted { $0.yLines.first ?? 0 > $1.yLines.first ?? 0 }
 
-        let systemGroups = spineClusteredSystems(pageStaves, paths: paths, pageIndex: pageIndex)
+        let systemGroups = systemBands.map { bandedSystems(pageStaves, bands: $0) }
+            ?? spineClusteredSystems(pageStaves, paths: paths, pageIndex: pageIndex)
             ?? clusterIntoSystems(pageStaves, ensembleSize: ensembleSize)
         return systemGroups.map { staffGroup -> ImportSystem in
             let parts = couplingIntoParts(
@@ -54,6 +56,26 @@ extension PDFImporter {
                 carriesLeadingTime: carriesLeadingTime,
             )
         }
+    }
+
+    /// `pageStaves`, top to bottom, as the systems the host's `bands` say
+    /// (`PDFImportOptions.omrSystemBands`): neighbours whose middle lines
+    /// fall in one band are one system; a staff in no band is its own.
+    static func bandedSystems(_ pageStaves: [Staff], bands: [ClosedRange<Double>]) -> [[Staff]] {
+        var systems: [[Staff]] = []
+        var lastBand: Int?
+        for staff in pageStaves {
+            let lines = staff.yLines.map(Double.init)
+            let middle = ((lines.min() ?? 0) + (lines.max() ?? 0)) / 2
+            let band = bands.firstIndex { $0.contains(middle) }
+            if let band, band == lastBand, !systems.isEmpty {
+                systems[systems.count - 1].append(staff)
+            } else {
+                systems.append([staff])
+            }
+            lastBand = band
+        }
+        return systems
     }
 
     // MARK: - System / staff geometry helpers

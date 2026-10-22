@@ -179,6 +179,21 @@ public struct PDFImportOptions: Sendable {
     /// order.
     public var omrCouplesByStaves = false
 
+    /// Where each page's systems lie, when the host knows: for page `i`,
+    /// `omrSystemBands[i]` holds one y-range per system, in the page's points
+    /// (origin bottom-left). Staves whose middle line falls in one range are
+    /// one system, whatever joins them; a staff in none is a system of its
+    /// own. Nil by default, and for a page past the array's end: systems are
+    /// found as before.
+    ///
+    /// A raster page joins a system's staves only by a vertical run that
+    /// covers them, no wider than a staff space. On a photo, the system's
+    /// barline leans, breaks, or runs together with the brace beside it, and
+    /// a song's voice and piano — as far apart, lyrics between them, as its
+    /// systems are — read as three systems of a staff each. A host that has
+    /// found the systems on the picture itself can say so.
+    public var omrSystemBands: [[ClosedRange<Double>]]?
+
     /// Whether every staff's key signature reading is reported as an `info`
     /// diagnostic: the one at its system's start, as read — "none" too — and
     /// the courtesy key signature at its system's end, when there is one.

@@ -78,6 +78,7 @@ public enum PDFImporter {
                 ensembleSize: ensembleSize,
                 noteheadBandSpaces: ledgerBandSpaces(page: page, options: options, rasterPages: rasterPages),
                 carriesLeadingTime: carriesLeadingTime(page: page, options: options, rasterPages: rasterPages),
+                systemBands: options.omrSystemBands.flatMap { page < $0.count ? $0[page] : nil },
             )
             systemsAllPages.append(contentsOf: systems)
             if let probe = options.barRepairProbe, options.omrBarRepair, rasterPages?.contains(page) == true {
