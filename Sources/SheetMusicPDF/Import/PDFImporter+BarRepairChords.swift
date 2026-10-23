@@ -48,7 +48,7 @@ extension PDFImporter {
                 stems: c.stems, spatium: sp,
             )?.index)
         })
-        columns = joiningMirroredSeconds(columns, c, nearest: nearest)
+        columns = joiningMirroredSeconds(columns, c, nearest: nearest, anySecond: passes.contains(.mirroredChords))
         for column in columns {
             for chord in chordsOfColumn(column, c, nearest: nearest, passes: passes) {
                 // On a stem, a head read as whole never sets the value: the stem says it is not one.
@@ -73,12 +73,29 @@ extension PDFImporter {
     /// A column whose every head is a second (0.25–0.75 sp) from a head of the column before it,
     /// within 1.35 sp in x and on that column's stem (or, with no stem, beside a column with none),
     /// is that column's mirrored head.
-    static func joiningMirroredSeconds(_ columns: [[Int]], _ c: ChordContext, nearest: [Int: Int?]) -> [[Int]] {
+    ///
+    /// With `anySecond` (`.mirroredChords`, F6), a stemmed column on the column before's stem joins
+    /// it when one of its heads is a second from one of that column's: a chord's displaced head
+    /// stands across the stem with the heads above it a third or more from those left behind.
+    static func joiningMirroredSeconds(_ columns: [[Int]], _ c: ChordContext, nearest: [Int: Int?], anySecond: Bool = false) -> [[Int]] {
         let sp = c.spatium
         var out: [[Int]] = []
         for column in columns {
             guard let previous = out.last else { out.append(column); continue }
             let previousStems = Set(previous.compactMap { nearest[$0] ?? nil })
+            func second(_ h: Int) -> Bool {
+                let g = c.glyphs[h].geometry.origin
+                return previous.contains { p in
+                    let q = c.glyphs[p].geometry.origin
+                    let dy = abs(g.y - q.y)
+                    return g.x - q.x <= chordMateWindowInSpaces * sp && dy >= 0.25 * sp && dy <= 0.75 * sp
+                }
+            }
+            if anySecond, !previousStems.isEmpty,
+               column.allSatisfy({ h in (nearest[h] ?? nil).map(previousStems.contains) ?? false }), column.contains(where: second) {
+                out[out.count - 1] += column
+                continue
+            }
             let mirrored = column.allSatisfy { h in
                 let g = c.glyphs[h].geometry.origin
                 let ownStem = nearest[h] ?? nil

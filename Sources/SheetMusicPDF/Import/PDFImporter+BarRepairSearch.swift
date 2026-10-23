@@ -224,7 +224,7 @@ extension PDFImporter {
         }
         if passes.contains(.tupletGroups), !isCompound(ts) {
             units += tupletUnits(order, elements: elements, bar: bar, barTicks: barTicks,
-                                 broken: passes.contains(.brokenTuplets))
+                                 broken: passes.contains(.brokenTuplets), runs: passes.contains(.tupletRuns))
         }
         if passes.contains(.phantomGroups) {
             for run in phantomRuns(order, elements: elements, bar: bar) {
@@ -273,9 +273,11 @@ extension PDFImporter {
     /// carried on (a beam line no further off than the group's own stems are apart). A plain
     /// quarter beside a beamed pair stands at its own stem's length and is no member.
     static func tupletUnits(
-        _ order: [Int], elements: [RhythmElement], bar: BarEvidence, barTicks: Int, broken: Bool = false,
+        _ order: [Int], elements: [RhythmElement], bar: BarEvidence, barTicks: Int, broken: Bool = false, runs inRuns: Bool = false,
     ) -> [RepairUnit] {
         var out: [RepairUnit] = []
+        // `.tupletRuns`: intact groups that could be tuplets, the spacing aside.
+        var runCandidates: [[Int]] = []
         let notes = order
         func stemOf(_ m: Int) -> StemEvidence? {
             guard let ev = elements[m].evidence, !ev.virtualStem, let s = ev.stem else { return nil }
@@ -288,6 +290,11 @@ extension PDFImporter {
             guard let first = members.first, let index = order.firstIndex(of: first),
                   order[index ..< min(order.count, index + members.count)].elementsEqual(members)
             else { continue }
+            if inRuns, [3, 6].contains(members.count), members.allSatisfy({ stemOf($0).map(lined) ?? false }),
+               isPlainValue(elements[members[0]].chord.duration),
+               members.allSatisfy({ elements[$0].chord.duration == elements[members[0]].chord.duration }) {
+                runCandidates.append(members)
+            }
             var runs: [(members: [Int], cost: Int)] = []
             if [3, 6].contains(members.count), members.allSatisfy({ stemOf($0).map(lined) ?? false }) {
                 runs.append((members, RepairCost.tuplet))
@@ -313,6 +320,30 @@ extension PDFImporter {
                 let old = run.compactMap { ticks(elements[$0].chord.duration, bar: barTicks) }.reduce(0, +)
                 out.append(RepairUnit(kind: .tuplet, members: run, durations: run.map { _ in scaled }, cost: cost,
                                       ratio: (normal, actual), delta: new * run.count - old))
+            }
+        }
+        // `.tupletRuns`: the intact groups of one size read together, as one tuplet decision. In
+        // simple time, a voice beamed in threes group after group is itself the tuplet's mark —
+        // continuous triplets stand evenly spaced, so no one group shows the gap a lone triplet's
+        // spacing test asks for. The search still takes it only where it makes the voice sum.
+        if inRuns {
+            for size in [3, 6] {
+                let groups = runCandidates.filter { $0.count == size }
+                guard groups.count >= 2 else { continue }
+                let (normal, actual) = size == 3 ? (2, 3) : (4, 6)
+                var members: [Int] = [], durations: [NoteDuration] = [], delta = 0, ok = true
+                for group in groups {
+                    let base = elements[group[0]].chord.duration.asFraction
+                    let scaled = NoteDuration.fraction(Fraction(numerator: base.numerator * normal, denominator: base.denominator * actual))
+                    guard let new = ticks(scaled, bar: barTicks) else { ok = false; break }
+                    let old = group.compactMap { ticks(elements[$0].chord.duration, bar: barTicks) }.reduce(0, +)
+                    members += group
+                    durations += group.map { _ in scaled }
+                    delta += new * group.count - old
+                }
+                guard ok else { continue }
+                out.append(RepairUnit(kind: .tuplet, members: members, durations: durations, cost: RepairCost.tuplet,
+                                      ratio: (normal, actual), delta: delta))
             }
         }
         return out

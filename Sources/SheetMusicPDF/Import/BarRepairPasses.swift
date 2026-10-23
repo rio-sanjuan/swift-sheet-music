@@ -66,15 +66,27 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// Never in `.all`.
     public static let leaveUnfit = BarRepairPasses(rawValue: 1 << 18)
 
+    /// P6, with `.tupletGroups`: every intact beam group of a voice that could be a triplet (or
+    /// a sextuplet), the same size, read as one together at a single tuplet's cost — a bar of
+    /// triplet accompaniment is four groups, and the search takes one tuplet at most. FretCodex
+    /// fork, F6.
+    public static let tupletRuns = BarRepairPasses(rawValue: 1 << 19)
+    /// P4: a stemmed column on the stem of the column before it joins that column's chord when any
+    /// of its heads, not every one, is a second from that column's — a chord's displaced head
+    /// carries the heads above it across the stem. FretCodex fork, F6.
+    public static let mirroredChords = BarRepairPasses(rawValue: 1 << 20)
     /// Every pass the fork recommends: those that earned their place, each left out in turn,
     /// through FretCodex's PageReader (its ADR 0006, round 3). Measured and left out: P2
     /// (`.flagsInSpaces`, no page moved), `.headKindRule`, `.voiceRule`, `.revertRule`,
     /// `.phantomGroups` (each within noise or worse), `.legacyFallback` and `.threeChanges` (each
     /// cost note values on the phone level), and `.brokenTuplets` (under the drop rule's margin,
     /// and it can turn a straight bar into a triplet when a stray note leaves it a beat over).
+    /// F6 adds `.tupletRuns` and `.mirroredChords`, measured on FretCodex's Lieder bench (its ADR
+    /// 0006, round 4): on its confirm songs, read clean, values 0.816 → 0.847, and no page of its
+    /// corpus or robustness pages moved but three whose triplets now read.
     public static let all: BarRepairPasses = [
         .ledgerBand, .dotColumns, .beamRescue, .columnChords, .repairSearch, .extrapolatedBeams,
-        .stubImpliesPrimary, .tupletGroups, .leadingTime,
+        .stubImpliesPrimary, .tupletGroups, .leadingTime, .tupletRuns, .mirroredChords,
     ]
 
     /// Each bit's name, for a host that sets passes from text.
@@ -87,5 +99,6 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
         ("threeChanges", .threeChanges), ("revertRule", .revertRule),
         ("headKindRule", .headKindRule), ("revertEverywhere", .revertEverywhere),
         ("brokenTuplets", .brokenTuplets), ("leadingTime", .leadingTime), ("leaveUnfit", .leaveUnfit),
+        ("tupletRuns", .tupletRuns), ("mirroredChords", .mirroredChords),
     ]
 }
