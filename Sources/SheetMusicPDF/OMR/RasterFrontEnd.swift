@@ -63,12 +63,39 @@ enum RasterFrontEnd {
                     + "silently returns no glyphs with no diagnostic",
             ))
         }
-        let glyphs = try detector.glyphs(
+        let detected = try detector.glyphs(
             pageIndex: pageIndex, analysis: analysis, diagnostics: diagnostics,
         )
-        // texts and curves stay empty: no OCR, no curve detector. A raster page
-        // therefore carries no title, lyrics, tempo text or ties.
-        let walked = WalkedContent(glyphs: glyphs, texts: [], paths: analysis.paths, curves: [])
+        // FretCodex fork, F7: the detector's tuplet numerals go to the page's texts
+        // (`tupletNumeralsAsText`). Otherwise texts and curves stay empty: no OCR, no curve
+        // detector, so a raster page carries no title, lyrics, tempo text or ties.
+        let (glyphs, texts) = Self.tupletNumeralsAsText(detected, pageIndex: pageIndex)
+        let walked = WalkedContent(glyphs: glyphs, texts: texts, paths: analysis.paths, curves: [])
         return (walked, analysis.pageSizePt)
+    }
+}
+
+extension RasterFrontEnd {
+    /// FretCodex fork, F7: `detected` with each tuplet numeral the detector read (`tuplet3`…
+    /// `tuplet9`) taken out of the glyphs and given to the page's texts as the digit it is, at its
+    /// origin and size. A vector page carries the numeral as text, so `detectTupletMarks` anchors
+    /// it to its beam or bracket from there, as it does a vector page's.
+    static func tupletNumeralsAsText(
+        _ detected: [ClassifiedGlyph], pageIndex: Int,
+    ) -> (glyphs: [ClassifiedGlyph], texts: [TextGlyph]) {
+        var glyphs: [ClassifiedGlyph] = []
+        var texts: [TextGlyph] = []
+        for glyph in detected {
+            if case let .tupletDigit(digit) = glyph.semantic {
+                let size = glyph.geometry.renderedSize
+                texts.append(TextGlyph(
+                    text: String(digit), fontName: "OMR-tuplet", fontSize: size, renderedSize: size,
+                    origin: glyph.geometry.origin, bbox: .zero, pageIndex: pageIndex,
+                ))
+            } else {
+                glyphs.append(glyph)
+            }
+        }
+        return (glyphs, texts)
     }
 }

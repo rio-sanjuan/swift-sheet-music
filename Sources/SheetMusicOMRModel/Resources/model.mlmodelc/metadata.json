@@ -7,9 +7,9 @@
         "hasShapeFlexibility" : "0",
         "isOptional" : "0",
         "dataType" : "Float32",
-        "formattedType" : "MultiArray (Float32 1 × 62 × 96 × 96)",
+        "formattedType" : "MultiArray (Float32 1 × 67 × 96 × 96)",
         "shortDescription" : "",
-        "shape" : "[1, 62, 96, 96]",
+        "shape" : "[1, 67, 96, 96]",
         "name" : "heatmap",
         "type" : "MultiArray"
       },
@@ -39,12 +39,13 @@
     ],
     "specificationVersion" : 6,
     "mlProgramOperationTypeHistogram" : {
-      "UpsampleBilinear" : 2,
-      "Relu" : 9,
+      "Concat" : 1,
       "Cast" : 4,
-      "Conv" : 17,
+      "Conv" : 20,
+      "Relu" : 11,
       "Sigmoid" : 1,
-      "Add" : 5
+      "Add" : 5,
+      "UpsampleBilinear" : 2
     },
     "computePrecision" : "Mixed (Float16, Float32, Int32)",
     "isUpdatable" : "0",
@@ -63,7 +64,7 @@
       "name" : "MLModelType_mlProgram"
     },
     "userDefinedMetadata" : {
-      "com.github.apple.coremltools.conversion_date" : "2026-09-03",
+      "com.github.apple.coremltools.conversion_date" : "2026-10-23",
       "com.github.apple.coremltools.source" : "torch==2.13.0",
       "com.github.apple.coremltools.version" : "9.0",
       "com.github.apple.coremltools.source_dialect" : "TorchScript"

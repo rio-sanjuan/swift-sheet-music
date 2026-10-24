@@ -75,6 +75,11 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// of its heads, not every one, is a second from that column's — a chord's displaced head
     /// carries the heads above it across the stem. FretCodex fork, F6.
     public static let mirroredChords = BarRepairPasses(rawValue: 1 << 20)
+    /// P6: a bar the tuplet numerals on it leave with more voices unsummed than it has read without
+    /// them is read without them. A page prints a run's first numerals and leaves the rest to be
+    /// understood; read, those few mark some of a voice's groups and not the others, and the
+    /// search, which takes one tuplet at most, cannot finish the run. FretCodex fork, F7.
+    public static let numeralRevert = BarRepairPasses(rawValue: 1 << 21)
     /// Every pass the fork recommends: those that earned their place, each left out in turn,
     /// through FretCodex's PageReader (its ADR 0006, round 3). Measured and left out: P2
     /// (`.flagsInSpaces`, no page moved), `.headKindRule`, `.voiceRule`, `.revertRule`,
@@ -86,7 +91,7 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
     /// corpus or robustness pages moved but three whose triplets now read.
     public static let all: BarRepairPasses = [
         .ledgerBand, .dotColumns, .beamRescue, .columnChords, .repairSearch, .extrapolatedBeams,
-        .stubImpliesPrimary, .tupletGroups, .leadingTime, .tupletRuns, .mirroredChords,
+        .stubImpliesPrimary, .tupletGroups, .leadingTime, .tupletRuns, .mirroredChords, .numeralRevert,
     ]
 
     /// Each bit's name, for a host that sets passes from text.
@@ -99,6 +104,6 @@ public struct BarRepairPasses: OptionSet, Sendable, Hashable {
         ("threeChanges", .threeChanges), ("revertRule", .revertRule),
         ("headKindRule", .headKindRule), ("revertEverywhere", .revertEverywhere),
         ("brokenTuplets", .brokenTuplets), ("leadingTime", .leadingTime), ("leaveUnfit", .leaveUnfit),
-        ("tupletRuns", .tupletRuns), ("mirroredChords", .mirroredChords),
+        ("tupletRuns", .tupletRuns), ("mirroredChords", .mirroredChords), ("numeralRevert", .numeralRevert),
     ]
 }

@@ -245,9 +245,11 @@
 
         @Test func vocabularyIsReachableFromSourcesAndStillFrozen() {
             let table = OMRGlyphVocabulary.trainable
-            #expect(table.count == 62)
+            // FretCodex fork, F7: five tuplet numerals appended after "ornament".
+            #expect(table.count == 67)
             #expect(table.first == "brace")
-            #expect(table.last == "ornament")
+            #expect(table[61] == "ornament")
+            #expect(Array(table.suffix(5)) == ["tuplet3", "tuplet5", "tuplet6", "tuplet7", "tuplet9"])
             // Hand-pasting 62 entries can duplicate one and drop another while
             // keeping the count right; a Set comparison catches exactly that.
             #expect(Set(table).count == table.count, "the table has a duplicate entry")

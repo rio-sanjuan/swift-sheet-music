@@ -116,6 +116,10 @@ extension PDFImporter {
             rasterPages.insert(index)
             walked.glyphs += result.walked.glyphs
             walked.paths += result.walked.paths
+            // FretCodex fork, F7: the tuplet numerals the detector read
+            // (`RasterFrontEnd.tupletNumeralsAsText`), in the analysis's frame
+            // as its glyphs and paths are.
+            walked.texts += result.walked.texts
             // The analysis's own frame, never the mediaBox: on a resampled page
             // they differ, and mixing them shifts paths relative to glyphs.
             pageSizes[index] = result.pageSize

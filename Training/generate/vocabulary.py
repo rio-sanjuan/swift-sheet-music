@@ -29,6 +29,8 @@ CLASS_NAMES = [
     "segno", "coda", "dalSegno", "daCapo", "fine", "toCoda",
     "fermata",
     "dynamic", "articulation", "ornament",
+    # FretCodex fork: tuplet numerals (appended; labelled from the text stream).
+    "tuplet3", "tuplet5", "tuplet6", "tuplet7", "tuplet9",
 ]
 
 RESERVED = ["stem", "staff5Lines", "rest128th", "rest256th", "restOther"]

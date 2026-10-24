@@ -113,6 +113,9 @@ enum OMRGlyphVocabulary {
         ("dynamic", .dynamic),
         ("articulation", .articulation),
         ("ornament", .ornament),
+        // FretCodex fork: tuplet numerals, appended (the table is append-only).
+        ("tuplet3", .tupletDigit(3)), ("tuplet5", .tupletDigit(5)), ("tuplet6", .tupletDigit(6)),
+        ("tuplet7", .tupletDigit(7)), ("tuplet9", .tupletDigit(9)),
     ]
 
     static let detectorVocabulary: [String] = detectorTable.map(\.className)
@@ -191,6 +194,7 @@ enum OMRGlyphVocabulary {
         "dynamic",
         "articulation",
         "ornament",
+        "tuplet3", "tuplet5", "tuplet6", "tuplet7", "tuplet9",
     ]
 
     /// `"restOther"` deliberately returns `nil` — it has no unique inverse,

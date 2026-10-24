@@ -5,10 +5,11 @@
     import Testing
 
     struct OMRLabelClassNamesTests {
-        @Test func detectorVocabularyHas64UniqueClasses() {
+        @Test func detectorVocabularyHas69UniqueClasses() {
+            // 64 upstream, and the FretCodex fork's five tuplet numerals (F7).
             let v = OMRLabelClassNames.detectorVocabulary
-            #expect(v.count == 64)
-            #expect(Set(v).count == 64)
+            #expect(v.count == 69)
+            #expect(Set(v).count == 69)
             // Reserved names must not leak into the detector vocabulary.
             for reserved in ["stem", "staff5Lines", "rest128th", "rest256th", "restOther"] {
                 #expect(!v.contains(reserved))

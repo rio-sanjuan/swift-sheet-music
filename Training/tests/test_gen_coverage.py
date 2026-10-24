@@ -390,6 +390,9 @@ _TEXTURE_SUPPLIED = {
     "flag8thUp": 6848, "clefG": 6700, "timeSig4": 6359, "rest16th": 5136,
     "rest8th": 4928, "restQuarter": 3840, "clefF": 2858, "restHalf": 2480,
     "clefG8vb": 1545, "clefPercussion": 1136,
+    # FretCodex fork, F7: the tuplet numerals, labelled from the textures' tuplets by
+    # FretCodex's tools/tuplet_labels.py (fc-tuplets-v1; 6 and 9 from fc-tuplets-v2).
+    "tuplet3": 15336, "tuplet5": 15536, "tuplet7": 15192, "tuplet6": 5044, "tuplet9": 4856,
 }
 
 

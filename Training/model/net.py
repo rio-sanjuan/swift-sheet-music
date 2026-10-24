@@ -64,7 +64,7 @@ class SymbolNet(nn.Module):
     target semantics each head is trained against.
     """
 
-    def __init__(self, num_classes: int = 62, width: int = 32):
+    def __init__(self, num_classes: int = 67, width: int = 32, extra_classes: int = 0):
         super().__init__()
         stage4_channels = 2 * width
         stage8_channels = 3 * width
@@ -96,6 +96,28 @@ class SymbolNet(nn.Module):
         # over every cell of every class before it can learn anything.
         nn.init.constant_(self.heatmap_head.bias, -2.19)
 
+        # FretCodex fork: classes appended to a trained network's, read by a branch of their own
+        # from the same features, their channels after `heatmap_head`'s. Training only this
+        # branch leaves every other output exactly the trained network's.
+        self.extra_head = None
+        if extra_classes > 0:
+            self.extra_head = nn.Sequential(
+                nn.Conv2d(stage4_channels, stage4_channels, 3, padding=1), nn.ReLU(inplace=True),
+                nn.Conv2d(stage4_channels, stage4_channels, 3, padding=1), nn.ReLU(inplace=True),
+                nn.Conv2d(stage4_channels, extra_classes, 1),
+            )
+            nn.init.constant_(self.extra_head[-1].bias, -2.19)
+
+    @classmethod
+    def from_state_dict(cls, state: dict) -> "SymbolNet":
+        """A network shaped as `state` is — width, classes, any extra branch — with it loaded."""
+        width = state["stem.0.0.weight"].shape[0]
+        classes = state["heatmap_head.weight"].shape[0]
+        extra = state["extra_head.4.weight"].shape[0] if "extra_head.4.weight" in state else 0
+        model = cls(num_classes=classes, width=width, extra_classes=extra)
+        model.load_state_dict(state)
+        return model
+
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         stem = self.stem(x)
         c4 = self.stage4(stem)
@@ -109,7 +131,10 @@ class SymbolNet(nn.Module):
             p8, size=c4.shape[-2:], mode="bilinear", align_corners=False)
 
         fused = self.shared(p4)
-        return self.heatmap_head(fused), self.offset_head(fused), self.geom_head(fused)
+        heatmap = self.heatmap_head(fused)
+        if self.extra_head is not None:
+            heatmap = torch.cat([heatmap, self.extra_head(fused)], dim=1)
+        return heatmap, self.offset_head(fused), self.geom_head(fused)
 
 
 class ExportWrapper(nn.Module):

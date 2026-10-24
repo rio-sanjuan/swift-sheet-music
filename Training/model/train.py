@@ -85,6 +85,18 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
                               "nothing on clean. Pass 'none' only to "
                               "reproduce the pre-augmentation checkpoints "
                               "(run1/run2/run3).")
+    parser.add_argument("--init", type=Path, default=None,
+                         help="FretCodex fork: start from this state dict (a SymbolNet's). Its "
+                              "heatmap head may have fewer classes than VOCABULARY: those rows "
+                              "are copied and the classes appended after them start at the prior.")
+    parser.add_argument("--freeze-bn", action="store_true",
+                         help="FretCodex fork: keep every BatchNorm in eval mode with its "
+                              "parameters fixed — for weights recovered from a converted model, "
+                              "whose batch norms are folded into the convolutions.")
+    parser.add_argument("--new-classes-only", action="store_true",
+                         help="FretCodex fork: with --init, add a branch for the classes --init "
+                              "lacks (SymbolNet.extra_head) and train only it; every other weight, "
+                              "and every old class's output, stays exactly --init's. Implies --freeze-bn.")
     parser.add_argument("--workers", type=int, default=None,
                          help="DataLoader worker processes. Default: "
                               "cpu_count - 2, capped at 8. 0 loads in the "
@@ -170,6 +182,10 @@ def _run_epoch(model: net.SymbolNet, loader: DataLoader,
     (only when `train`) backward + optimizer step. Returns the mean loss
     over batches (0.0 if `loader` yields none)."""
     model.train(train)
+    if train and getattr(model, "frozen_bn", False):
+        for m in model.modules():
+            if isinstance(m, torch.nn.BatchNorm2d):
+                m.eval()
     total_loss = 0.0
     batches = 0
     context = torch.enable_grad() if train else torch.no_grad()
@@ -276,8 +292,46 @@ def main(argv: list[str] | None = None) -> int:
     train_loader = _make_loader(train_ds, args.batch, train_sampler, workers)
     val_loader = _make_loader(val_ds, args.batch, None, workers)
 
-    model = net.SymbolNet(num_classes=len(prep.VOCABULARY)).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
+    old_rows = None
+    if args.new_classes_only:
+        # FretCodex fork: --init's network as it is, and a branch of its own for the classes it
+        # lacks (`SymbolNet.extra_head`); only that branch trains.
+        if args.init is None:
+            raise SystemExit("--new-classes-only needs --init")
+        state = torch.load(args.init, map_location="cpu")
+        old_rows = state["heatmap_head.weight"].shape[0]
+        model = net.SymbolNet(num_classes=old_rows, extra_classes=len(prep.VOCABULARY) - old_rows)
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        if unexpected or any(not k.startswith("extra_head.") for k in missing):
+            raise SystemExit(f"--init: missing {missing}, unexpected {unexpected}")
+        args.freeze_bn = True
+        for name, p in model.named_parameters():
+            p.requires_grad_(name.startswith("extra_head."))
+        initial = {k: v.clone() for k, v in model.state_dict().items() if not k.startswith("extra_head.")}
+        print(f"init from {args.init}; training classes {old_rows}..<{len(prep.VOCABULARY)} in extra_head only", flush=True)
+    else:
+        model = net.SymbolNet(num_classes=len(prep.VOCABULARY))
+    if args.init is not None and not args.new_classes_only:
+        state = torch.load(args.init, map_location="cpu")
+        own = model.state_dict()
+        for name, value in state.items():
+            if name not in own:
+                continue
+            if own[name].shape == value.shape:
+                own[name] = value
+            elif name.startswith("heatmap_head.") and value.shape[0] < own[name].shape[0]:
+                own[name][: value.shape[0]] = value  # the old classes; new ones keep their prior init
+            else:
+                raise SystemExit(f"--init: {name} {tuple(value.shape)} cannot fill {tuple(own[name].shape)}")
+        model.load_state_dict(own)
+        print(f"init from {args.init}", flush=True)
+    if args.freeze_bn:
+        model.frozen_bn = True
+        for m in model.modules():
+            if isinstance(m, torch.nn.BatchNorm2d):
+                m.requires_grad_(False)
+    model = model.to(device)
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr,
                                    weight_decay=_WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=max(1, args.epochs))
@@ -295,6 +349,10 @@ def main(argv: list[str] | None = None) -> int:
                                 train=False)
                     if len(val_loader) > 0 else None)
         scheduler.step()
+        if old_rows is not None:
+            for k, v in model.state_dict().items():
+                if k in initial and not torch.equal(v, initial[k].to(v.device)):
+                    raise SystemExit(f"--new-classes-only: {k} changed")
 
         val_text = "nan" if val_loss is None else f"{val_loss:.6f}"
         line = (f"epoch={epoch} train_loss={train_loss:.6f} "

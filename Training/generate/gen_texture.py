@@ -114,7 +114,9 @@ _DIATONIC_PITCHES = sorted(
 # note (4 ticks): a triplet of eighths, a quintuplet of 16ths, a
 # septuplet of 32nds. Spans the "3:2 … 7:8" range called for in the task
 # brief with the conventional written-note choice for each ratio.
-_TUPLET_KINDS = [(2, 3, "eighth"), (4, 5, "16th"), (8, 7, "32nd")]
+_TUPLET_KINDS = [(2, 3, "eighth"), (4, 5, "16th"), (8, 7, "32nd"),
+                 # FretCodex fork: sextuplets and nonuplets, for the tuplet-numeral classes.
+                 (4, 6, "16th"), (8, 9, "32nd")]
 
 # General MIDI drum pitches used only as staff-line variety; percussion
 # notation has no Western pitch spelling, so `tpc` stays fixed (see

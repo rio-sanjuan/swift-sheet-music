@@ -36,3 +36,20 @@ def test_the_export_wrapper_emits_probabilities():
     wrapped = net.ExportWrapper(net.SymbolNet(num_classes=3, width=8))
     hm, _, _ = wrapped(torch.zeros(1, 1, 64, 64))
     assert float(hm.min()) >= 0.0 and float(hm.max()) <= 1.0
+
+
+def test_an_extra_branch_appends_its_classes_and_leaves_the_rest_alone():
+    # FretCodex fork, F7: classes appended to a trained network's, read by `extra_head`.
+    torch.manual_seed(0)
+    base = net.SymbolNet(num_classes=62, width=16).eval()
+    grown = net.SymbolNet(num_classes=62, width=16, extra_classes=5)
+    missing, unexpected = grown.load_state_dict(base.state_dict(), strict=False)
+    assert not unexpected and all(k.startswith("extra_head.") for k in missing)
+    grown.eval()
+    x = torch.rand(1, 1, 128, 128)
+    with torch.no_grad():
+        (hm, off, geom), (hm2, off2, geom2) = base(x), grown(x)
+    assert hm2.shape == (1, 67, 32, 32)
+    assert torch.equal(hm2[:, :62], hm) and torch.equal(off2, off) and torch.equal(geom2, geom)
+    again = net.SymbolNet.from_state_dict(grown.state_dict())
+    assert again.extra_head is not None and again.extra_head[-1].out_channels == 5

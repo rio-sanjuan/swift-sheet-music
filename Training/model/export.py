@@ -144,10 +144,7 @@ def _build_model(checkpoint_arg: str) -> tuple[net.SymbolNet, dict]:
 
     checkpoint = torch.load(checkpoint_arg, map_location="cpu", weights_only=False)
     state_dict = checkpoint["model_state_dict"]
-    width = state_dict["stem.0.0.weight"].shape[0]
-    num_classes = state_dict["heatmap_head.weight"].shape[0]
-    model = net.SymbolNet(num_classes=num_classes, width=width)
-    model.load_state_dict(state_dict)
+    model = net.SymbolNet.from_state_dict(state_dict)
     return model, checkpoint.get("hyperparams", {})
 
 

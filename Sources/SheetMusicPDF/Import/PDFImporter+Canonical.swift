@@ -198,6 +198,7 @@ enum PDFImporterCanonicalOrder {
         case .articulation: [49, 0]
         case .ornament: [50, 0]
         case let .unknown(codepoint): [51, Double(codepoint)]
+        case let .tupletDigit(digit): [52, Double(digit)]
         }
     }
 

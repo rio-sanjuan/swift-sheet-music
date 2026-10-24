@@ -90,9 +90,10 @@ def _parse_swift_detector_table_names() -> list[str]:
     return _parse_detector_table_names_from_source(text)
 
 
-def test_vocabulary_has_64_unique_classes():
-    assert len(vocabulary.CLASS_NAMES) == 64
-    assert len(set(vocabulary.CLASS_NAMES)) == 64
+def test_vocabulary_has_69_unique_classes():
+    # 64 upstream, and the FretCodex fork's five tuplet numerals (F7).
+    assert len(vocabulary.CLASS_NAMES) == 69
+    assert len(set(vocabulary.CLASS_NAMES)) == 69
 
 
 def test_spec_examples_present_and_reserved_excluded():
@@ -105,7 +106,9 @@ def test_spec_examples_present_and_reserved_excluded():
 def test_order_is_frozen_at_the_ends():
     # Order is load-bearing (COCO category ids). Pin both ends.
     assert vocabulary.CLASS_NAMES[0] == "brace"
-    assert vocabulary.CLASS_NAMES[-1] == "ornament"
+    # FretCodex fork, F7: the tuplet numerals appended after "ornament".
+    assert vocabulary.CLASS_NAMES[-6] == "ornament"
+    assert vocabulary.CLASS_NAMES[-5:] == ["tuplet3", "tuplet5", "tuplet6", "tuplet7", "tuplet9"]
 
 
 def test_matches_swift_detector_table():

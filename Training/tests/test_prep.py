@@ -55,8 +55,9 @@ def test_the_split_covers_all_three_buckets(tmp_path):
     assert seen == {"train", "val", "test"}
 
 
-def test_the_vocabulary_is_62_classes_and_excludes_the_unreachable_two():
-    assert len(prep.VOCABULARY) == 62
+def test_the_vocabulary_is_67_classes_and_excludes_the_unreachable_two():
+    # 62 upstream, and the FretCodex fork's five tuplet numerals (F7).
+    assert len(prep.VOCABULARY) == 67
     assert "fine" not in prep.VOCABULARY
     assert "toCoda" not in prep.VOCABULARY
     assert "stem" not in prep.VOCABULARY

@@ -68,7 +68,7 @@ extension PDFImporter {
             !referee || fits(new, legacySplit(new, staffMidY: staffMidY))
                 >= fits(old, legacySplit(old, staffMidY: staffMidY))
         }
-        func decode(columns: Bool) -> ([RhythmElement], BarEvidence) {
+        func decode(columns: Bool, text: Bool = true) -> ([RhythmElement], BarEvidence) {
             var chosen = passes.subtracting(.columnChords)
             if columns { chosen.insert(.columnChords) }
             var (elements, evidence) = decodeRhythmWithEvidence(
@@ -81,67 +81,85 @@ extension PDFImporter {
                 applyDotColumns(&elements, bar: evidence, apply: passes.contains(.dotColumns))
                 applyFlagsInSpaces(&elements, bar: evidence, flagBand: yBand, apply: passes.contains(.flagsInSpaces))
             }
-            return (readingText(bar, elements), evidence)
-        }
-        var (elements, evidence) = decode(columns: false)
-        if let probe = bar.options.barRepairProbe {
-            probeBar(evidence, location: bar.location + ", slot \(bar.slot)", probe: probe)
+            return (text ? readingText(bar, elements) : elements, evidence)
         }
         if passes.isEmpty {
+            let (elements, evidence) = decode(columns: false)
+            if let probe = bar.options.barRepairProbe {
+                probeBar(evidence, location: bar.location + ", slot \(bar.slot)", probe: probe)
+            }
             return legacyTail(bar, elements: elements, staffMidY: staffMidY)
         }
-        // P4, reverted where it leaves fewer voices summing under a stacked-digit meter.
-        if passes.contains(.columnChords) {
-            let (columned, columnedEvidence) = decode(columns: true)
-            if keeps(columned, over: elements) { (elements, evidence) = (columned, columnedEvidence) }
-        }
-        // P3.
-        if passes.contains(.beamRescue) {
-            var rescued = elements
-            applyBeamRescue(&rescued, bar: evidence)
-            if keeps(rescued, over: elements) { elements = rescued }
-        }
-        // P5.
-        var split = legacySplit(elements, staffMidY: staffMidY)
-        var ownSplit = false
-        if passes.contains(.voiceRule) {
-            let rule = ruleSplit(elements, bar: evidence, staffMidY: staffMidY)
-            if !referee || fits(elements, rule) >= fits(elements, split) {
-                split = rule
-                ownSplit = true
+        // One reading of the bar through P4…P6: its elements, voices, and the voices left unsummed.
+        func reading(text: Bool) -> (reconciled: [RhythmElement], split: VoiceSplit, evidence: BarEvidence, unfit: [String]) {
+            var (elements, evidence) = decode(columns: false, text: text)
+            if let probe = bar.options.barRepairProbe {
+                probeBar(evidence, location: bar.location + ", slot \(bar.slot)", probe: probe)
             }
-        }
-        // P6, or upstream's repair on the split chosen.
-        var reconciled = elements
-        if passes.contains(.repairSearch) {
-            for (v, group) in split.groups.enumerated() {
-                let probe = bar.options.barRepairProbe.map { sink in { (line: String) in sink(line + " | \(bar.location), voice \(v + 1)") } }
-                let outcome = repairVoice(group, elements: &reconciled, bar: evidence, ts: bar.ts, passes: passes, probe: probe)
-                probe?("OUTCOME \(outcome)")
-                if case let .unfit(why) = outcome {
-                    bar.options.diagnostics?(PDFImportDiagnostic(
-                        severity: .warning, location: bar.location,
-                        message: "bar repair: voice \(v + 1) does not sum to the bar, left as read (\(why))",
-                        context: "slot \(bar.slot)",
-                    ))
+            // P4, reverted where it leaves fewer voices summing under a stacked-digit meter.
+            if passes.contains(.columnChords) {
+                let (columned, columnedEvidence) = decode(columns: true, text: text)
+                if keeps(columned, over: elements) { (elements, evidence) = (columned, columnedEvidence) }
+            }
+            // P3.
+            if passes.contains(.beamRescue) {
+                var rescued = elements
+                applyBeamRescue(&rescued, bar: evidence)
+                if keeps(rescued, over: elements) { elements = rescued }
+            }
+            // P5.
+            var split = legacySplit(elements, staffMidY: staffMidY)
+            var ownSplit = false
+            if passes.contains(.voiceRule) {
+                let rule = ruleSplit(elements, bar: evidence, staffMidY: staffMidY)
+                if !referee || fits(elements, rule) >= fits(elements, split) {
+                    split = rule
+                    ownSplit = true
                 }
             }
-        } else if passes.contains(.leaveUnfit) {
-            // Measuring only: no repair of any kind.
-        } else if ownSplit {
-            let barLength = Fraction(numerator: bar.ts.numerator, denominator: bar.ts.denominator)
-            for group in split.groups {
-                reconcileVoiceGroup(
-                    indices: group, barLength: barLength, spatium: bar.spatium, elements: &reconciled,
+            // P6, or upstream's repair on the split chosen.
+            var reconciled = elements
+            var unfit: [String] = []
+            if passes.contains(.repairSearch) {
+                for (v, group) in split.groups.enumerated() {
+                    let probe = bar.options.barRepairProbe.map { sink in { (line: String) in sink(line + " | \(bar.location), voice \(v + 1)") } }
+                    let outcome = repairVoice(group, elements: &reconciled, bar: evidence, ts: bar.ts, passes: passes, probe: probe)
+                    probe?("OUTCOME \(outcome)")
+                    if case let .unfit(why) = outcome {
+                        unfit.append("bar repair: voice \(v + 1) does not sum to the bar, left as read (\(why))")
+                    }
+                }
+            } else if passes.contains(.leaveUnfit) {
+                // Measuring only: no repair of any kind.
+            } else if ownSplit {
+                let barLength = Fraction(numerator: bar.ts.numerator, denominator: bar.ts.denominator)
+                for group in split.groups {
+                    reconcileVoiceGroup(
+                        indices: group, barLength: barLength, spatium: bar.spatium, elements: &reconciled,
+                        diagnostics: bar.options.diagnostics, location: bar.location,
+                    )
+                }
+            } else {
+                reconciled = reconcileMeasureDurations(
+                    elements: elements, timeSignature: bar.ts, spatium: bar.spatium,
                     diagnostics: bar.options.diagnostics, location: bar.location,
                 )
+                split = legacySplit(reconciled, staffMidY: staffMidY)
             }
-        } else {
-            reconciled = reconcileMeasureDurations(
-                elements: elements, timeSignature: bar.ts, spatium: bar.spatium,
-                diagnostics: bar.options.diagnostics, location: bar.location,
-            )
-            split = legacySplit(reconciled, staffMidY: staffMidY)
+            return (reconciled, split, evidence, unfit)
+        }
+        var (reconciled, split, evidence, unfit) = reading(text: true)
+        // `.numeralRevert`: numerals that leave more voices unsummed than the bar read without them
+        // are set aside — read on some of a voice's groups and not the rest, they mark a run the
+        // search would have read whole.
+        if passes.contains(.numeralRevert), !unfit.isEmpty, !bar.texts.isEmpty {
+            let plain = reading(text: false)
+            if plain.unfit.count < unfit.count { (reconciled, split, evidence, unfit) = plain }
+        }
+        for message in unfit {
+            bar.options.diagnostics?(PDFImportDiagnostic(
+                severity: .warning, location: bar.location, message: message, context: "slot \(bar.slot)",
+            ))
         }
         if let probe = bar.options.barRepairProbe {
             for (i, e) in reconciled.enumerated() {

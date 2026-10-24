@@ -150,6 +150,7 @@ enum SMuFLSemantic: Equatable, Hashable {
     case segno, coda, dalSegno, daCapo, fine, toCoda
     case fermata // out of scope but classified so it can be ignored cleanly
     case dynamic, articulation, ornament // out of scope buckets
+    case tupletDigit(Int) // a tuplet's numeral (3, 5, 6, 7, 9) — MuseScore draws it as text; FretCodex fork, detector only
     case unknown(UInt32) // emits info-diagnostic
 }
 

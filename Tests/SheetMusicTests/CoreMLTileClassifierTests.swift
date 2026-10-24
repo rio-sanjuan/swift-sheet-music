@@ -9,7 +9,8 @@
         /// caller-supplied path — that is the whole point of shipping it.
         @Test func theBundledModelLoadsWithNoConfiguration() throws {
             let classifier = try CoreMLTileClassifier()
-            #expect(classifier.manifest.classes.count == 62)
+            // 62 upstream, and the FretCodex fork's five tuplet numerals (F7).
+            #expect(classifier.manifest.classes.count == 67)
             #expect(classifier.manifest.staffSpacePx == 12)
             // Task 11 flips this; until then the bundled constants are the
             // ones the frozen metric table was measured with.

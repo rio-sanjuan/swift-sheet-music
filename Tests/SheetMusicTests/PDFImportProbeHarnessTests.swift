@@ -173,6 +173,7 @@
             case .articulation: "articulation"
             case .ornament: "ornament"
             case .unknown: "unknown"
+            case .tupletDigit: "tupletDigit"
             }
         }
 
