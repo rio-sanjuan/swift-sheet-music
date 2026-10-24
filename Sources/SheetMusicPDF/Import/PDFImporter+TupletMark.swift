@@ -44,6 +44,17 @@ extension PDFImporter {
     /// it; there is no corpus survey behind the exact value 3.
     static let tupletMarkBandSpatia: CGFloat = 3
 
+    /// FretCodex fork, F8: the band for a numeral the detector read on a raster page. Lieder
+    /// triplets over notes above or below the staff carry their numerals 3–6.6 spaces out
+    /// (FretCodex's Lieder bench, design songs); the anchor a mark still needs keeps a stray digit
+    /// out. Vector pages keep `tupletMarkBandSpatia`.
+    static let tupletDetectedBandSpatia: CGFloat = 7
+
+    /// FretCodex fork, F8: how far a detected numeral may sit from its beam. On a photographed
+    /// page a beam's fitted y and the numeral's both wander, and the nearest beam over a numeral
+    /// lay 3.4–6.7 spaces from it (the same bench, photo level).
+    static let tupletDetectedBeamTolSpatia: CGFloat = 5
+
     /// Widest a bracket arm may be, in spatia. A staff line spans the whole
     /// measure cell; an arm is a short stub.
     ///
@@ -183,6 +194,7 @@ extension PDFImporter {
             guard let ratio = tupletRatio(forDigit: glyph.text) else { continue }
             let y = glyph.origin.y
             // Outside the five lines, but not far outside.
+            let band = glyph.isDetectedNumeral ? tupletDetectedBandSpatia * spatium : band
             guard (y > topY && y <= topY + band)
                 || (y < bottomY && y >= bottomY - band) else { continue }
             guard xRange.contains(glyph.origin.x) else { continue }
@@ -289,7 +301,7 @@ extension PDFImporter {
             guard p.kind == .beam, p.pageIndex == pageIndex else { return false }
             guard beamMemberSpan(p).contains(digitX) else { return false }
             return abs(p.rect.midY - digitY)
-                <= tupletBeamDigitYTolSpatia * spatium
+                <= (digit.isDetectedNumeral ? tupletDetectedBeamTolSpatia : tupletBeamDigitYTolSpatia) * spatium
         }
         return candidates
             .map(beamMemberSpan)

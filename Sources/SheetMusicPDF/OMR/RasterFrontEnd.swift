@@ -76,6 +76,9 @@ enum RasterFrontEnd {
 }
 
 extension RasterFrontEnd {
+    /// The font name a detected tuplet numeral carries as text (`TextGlyph.isDetectedNumeral`).
+    static let tupletNumeralFont = "OMR-tuplet"
+
     /// FretCodex fork, F7: `detected` with each tuplet numeral the detector read (`tuplet3`…
     /// `tuplet9`) taken out of the glyphs and given to the page's texts as the digit it is, at its
     /// origin and size. A vector page carries the numeral as text, so `detectTupletMarks` anchors
@@ -84,18 +87,44 @@ extension RasterFrontEnd {
         _ detected: [ClassifiedGlyph], pageIndex: Int,
     ) -> (glyphs: [ClassifiedGlyph], texts: [TextGlyph]) {
         var glyphs: [ClassifiedGlyph] = []
-        var texts: [TextGlyph] = []
+        var numerals: [(digit: Int, geometry: GlyphGeometry)] = []
         for glyph in detected {
             if case let .tupletDigit(digit) = glyph.semantic {
-                let size = glyph.geometry.renderedSize
-                texts.append(TextGlyph(
-                    text: String(digit), fontName: "OMR-tuplet", fontSize: size, renderedSize: size,
-                    origin: glyph.geometry.origin, bbox: .zero, pageIndex: pageIndex,
-                ))
+                numerals.append((digit, glyph.geometry))
             } else {
                 glyphs.append(glyph)
             }
         }
+        // F8: one numeral to a place. The detector can read one numeral twice — as two classes
+        // at once (a 3 and a 9), or as one class a point apart across a tile seam — and a second
+        // mark at the same place finds its notes taken or names the wrong ratio. Of numerals
+        // closer than half their size, the commoner digit is kept, then the first read.
+        let commonness = [3, 6, 5, 7, 9]
+        let ordered = numerals.indices.sorted { a, b in
+            let ra = commonness.firstIndex(of: numerals[a].digit) ?? commonness.count
+            let rb = commonness.firstIndex(of: numerals[b].digit) ?? commonness.count
+            return ra != rb ? ra < rb : a < b
+        }.map { numerals[$0] }
+        var kept: [(digit: Int, geometry: GlyphGeometry)] = []
+        for numeral in ordered {
+            let o = numeral.geometry.origin, reach = 0.5 * numeral.geometry.renderedSize
+            guard !kept.contains(where: { abs($0.geometry.origin.x - o.x) < reach && abs($0.geometry.origin.y - o.y) < reach })
+            else { continue }
+            kept.append(numeral)
+        }
+        let texts = kept.map { numeral in
+            TextGlyph(
+                text: String(numeral.digit), fontName: tupletNumeralFont,
+                fontSize: numeral.geometry.renderedSize, renderedSize: numeral.geometry.renderedSize,
+                origin: numeral.geometry.origin, bbox: .zero, pageIndex: pageIndex,
+            )
+        }
         return (glyphs, texts)
     }
+}
+
+extension TextGlyph {
+    /// FretCodex fork, F8: whether the detector read this text, a tuplet numeral on a raster page
+    /// (`RasterFrontEnd.tupletNumeralsAsText`), rather than a PDF's text layer carrying it.
+    var isDetectedNumeral: Bool { fontName == RasterFrontEnd.tupletNumeralFont }
 }
