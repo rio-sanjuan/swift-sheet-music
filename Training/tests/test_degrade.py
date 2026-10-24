@@ -293,3 +293,29 @@ def test_scanner_profile_pins_the_preserved_defaults():
     assert profile["erode_dilate"]["elem_size"] == 2
     assert profile["threshold"]["thresh_lo"] == 120
     assert profile["threshold"]["thresh_hi"] == 200
+
+
+def test_the_phone_profile_moves_ink_and_labels_together():
+    # FretCodex fork: every stage of `profiles/phone.toml` runs, and the composed homography
+    # still lands a point of a drawn line on the line's ink.
+    from pathlib import Path
+    profile = degrade.load_profile(Path(__file__).resolve().parents[1] / "generate" / "profiles" / "phone.toml")
+    assert {name for name, _ in profile} >= {"perspective_warp", "paper_and_ink", "shadow", "unsharp"}
+    img = np.full((400, 300), 255, np.uint8)
+    img[100:106, :] = 0
+    for seed in range(5):
+        out, h = degrade.apply_chain(img, profile, np.random.default_rng(seed))
+        for x in (60, 150, 240):
+            p = h @ np.array([x, 103, 1.0])
+            u, v = int(round(p[0] / p[2])), int(round(p[1] / p[2]))
+            assert out[v - 2:v + 3, u - 2:u + 3].min() < 110, (seed, x)
+
+
+def test_a_perspective_warp_is_a_true_homography_and_photometric_stages_return_none():
+    rng = np.random.default_rng(0)
+    img = np.full((200, 160), 255, np.uint8)
+    _, h = degrade.stage_perspective_warp(img, rng, {"max_frac": 0.05})
+    assert h.shape == (3, 3) and abs(h[2, 2] - 1) < 1e-9
+    for stage in (degrade.stage_paper_and_ink, degrade.stage_shadow, degrade.stage_unsharp):
+        _, none = stage(img, np.random.default_rng(1), {"p": 1.0})
+        assert none is None

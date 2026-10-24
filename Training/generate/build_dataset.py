@@ -974,8 +974,14 @@ def print_faces_report(report: dict) -> int:
 # Frozen eval set / status / COCO
 # ---------------------------------------------------------------------
 
+def _freeze_one(job: tuple) -> None:
+    """One page of `freeze_dataset`, for a worker process."""
+    png, label_path, out_dir, profile, page_seed = job
+    degrade.freeze_eval_page(png, label_path, out_dir, profile, np.random.default_rng(page_seed))
+
+
 def freeze_dataset(root: Path, seed: int, profile_path: Path = DEFAULT_PROFILE,
-                   out_name: str = "eval_frozen") -> dict:
+                   out_name: str = "eval_frozen", workers: int = 1) -> dict:
     """Spec §6.5: degrade every clean page ONCE, with a recorded seed,
     into `<root>/<out_name>/<render_id>/`, so eval numbers stay
     comparable across time (training-time degradation is applied fresh
@@ -1011,10 +1017,19 @@ def freeze_dataset(root: Path, seed: int, profile_path: Path = DEFAULT_PROFILE,
     child_seeds = np.random.default_rng(seed + 1).integers(
         0, 2 ** 32, size=len(pages))
     frozen_pages: dict[str, int] = {}
-    for index, (render_id, png, label_path) in enumerate(pages):
-        degrade.freeze_eval_page(
-            png, label_path, out_root / render_id, profile,
-            np.random.default_rng(int(child_seeds[index])))
+    jobs = [(png, label_path, out_root / render_id, profile, int(child_seeds[index]))
+            for index, (render_id, png, label_path) in enumerate(pages)]
+    if workers > 1:
+        # FretCodex fork: each page draws from its own seed, so pages degraded in parallel are
+        # the pages degraded in turn, byte for byte.
+        import multiprocessing
+        with multiprocessing.get_context("spawn").Pool(workers) as pool:
+            for _ in pool.imap_unordered(_freeze_one, jobs, chunksize=8):
+                pass
+    else:
+        for job in jobs:
+            _freeze_one(job)
+    for render_id, _, _ in pages:
         frozen_pages[render_id] = frozen_pages.get(render_id, 0) + 1
     for render_id in sorted(frozen_pages):
         (out_root / render_id / "frozen.json").write_text(json.dumps({
@@ -1141,6 +1156,12 @@ def _build_parser() -> argparse.ArgumentParser:
     freeze.add_argument("--root", required=True)
     freeze.add_argument("--seed", type=int, required=True)
     freeze.add_argument("--profile", default=str(DEFAULT_PROFILE))
+    freeze.add_argument("--out-name", default="eval_frozen",
+                        help="FretCodex fork: the folder under --root, so sets degraded by "
+                             "different profiles (scanner, phone) can sit side by side")
+    freeze.add_argument("--workers", type=int, default=1,
+                        help="FretCodex fork: processes degrading pages at once; the output is "
+                             "the same for any number")
 
     coco = sub.add_parser("coco", help="convenience COCO detection export")
     coco.add_argument("--root", required=True)
@@ -1204,7 +1225,7 @@ def main(argv=None) -> int:
     if args.cmd == "faces":
         return print_faces_report(faces_report(Path(args.root), tol=args.tol))
     if args.cmd == "freeze":
-        freeze_dataset(Path(args.root), args.seed, Path(args.profile))
+        freeze_dataset(Path(args.root), args.seed, Path(args.profile), args.out_name, args.workers)
         return 0
     if args.cmd == "coco":
         root = Path(args.root)

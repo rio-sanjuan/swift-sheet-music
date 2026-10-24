@@ -97,7 +97,75 @@ def stage_rotate(img: np.ndarray, rng: np.random.Generator, p: dict):
     return _warp(img, h), h
 
 
+def _homography(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
+    """The 3x3 homography taking the four points `src` to `dst` (direct linear transform)."""
+    rows = []
+    for (x, y), (u, v) in zip(src, dst):
+        rows.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
+        rows.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
+    _, _, vt = np.linalg.svd(np.asarray(rows, dtype=np.float64))
+    h = vt[-1].reshape(3, 3)
+    return h / h[2, 2]
+
+
+def stage_perspective_warp(img: np.ndarray, rng: np.random.Generator, p: dict):
+    """FretCodex fork: the keystone a phone photo keeps after the reader squares it -- each
+    corner moved independently by up to `max_frac` of the page's size. The reader takes out
+    most of a photo's perspective by its staves; this is what is left."""
+    rows, cols = img.shape
+    m = p.get("max_frac", 0.02)
+    src = np.array([[0, 0], [cols - 1, 0], [cols - 1, rows - 1], [0, rows - 1]], dtype=np.float64)
+    dst = src + rng.uniform(-m, m, size=(4, 2)) * np.array([cols, rows])
+    h = _homography(src, dst)
+    inv = np.linalg.inv(h)
+    inv = inv / inv[2, 2]
+    warped = Image.fromarray(img).transform(
+        (cols, rows), Image.Transform.PERSPECTIVE, tuple(inv.reshape(-1)[:8]),
+        resample=Image.Resampling.BILINEAR, fillcolor=255)
+    return np.asarray(warped, dtype=np.uint8), h
+
+
 # --- Photometric stages (always return None) --------------------------------
+
+def stage_paper_and_ink(img: np.ndarray, rng: np.random.Generator, p: dict):
+    """FretCodex fork: a photo's grey paper and its ink -- white goes to a paper level, black to
+    an ink level, each drawn from its range, with a gamma between."""
+    paper = rng.uniform(p.get("paper_lo", 170), p.get("paper_hi", 240))
+    ink = rng.uniform(p.get("ink_lo", 0), p.get("ink_hi", 70))
+    gamma = rng.uniform(p.get("gamma_lo", 0.8), p.get("gamma_hi", 1.25))
+    out = ink + (paper - ink) * (img.astype(np.float64) / 255.0) ** gamma
+    return np.clip(out, 0, 255).astype(np.uint8), None
+
+
+def stage_shadow(img: np.ndarray, rng: np.random.Generator, p: dict):
+    """FretCodex fork: the photographer's shadow -- everything beyond a random line across the
+    page darkened to `darkness`, its edge softened by a blur of `edge` pixels."""
+    if rng.random() >= p.get("p", 0.5):
+        return img, None
+    rows, cols = img.shape
+    darkness = rng.uniform(p.get("dark_lo", 0.55), p.get("dark_hi", 0.85))
+    angle = rng.uniform(0, 2 * np.pi)
+    nx, ny = np.cos(angle), np.sin(angle)
+    yy, xx = np.mgrid[0:rows, 0:cols]
+    d = (xx - cols / 2) * nx + (yy - rows / 2) * ny
+    cut = rng.uniform(0.15, 0.45) * max(rows, cols)
+    mask = (d > cut).astype(np.float64)
+    edge = rng.uniform(p.get("edge_lo", 4), p.get("edge_hi", 40))
+    mask = ndimage.gaussian_filter(mask, sigma=edge)
+    field = 1.0 - (1.0 - darkness) * mask
+    return np.clip(img.astype(np.float64) * field, 0, 255).astype(np.uint8), None
+
+
+def stage_unsharp(img: np.ndarray, rng: np.random.Generator, p: dict):
+    """FretCodex fork: a phone's sharpening -- an unsharp mask, its halos round the ink."""
+    if rng.random() >= p.get("p", 0.5):
+        return img, None
+    radius = rng.uniform(p.get("radius_lo", 1.0), p.get("radius_hi", 2.5))
+    amount = rng.uniform(p.get("amount_lo", 0.3), p.get("amount_hi", 1.0))
+    base = img.astype(np.float64)
+    out = base + amount * (base - ndimage.gaussian_filter(base, sigma=radius))
+    return np.clip(out, 0, 255).astype(np.uint8), None
+
 
 def stage_erode_dilate(img: np.ndarray, rng: np.random.Generator, p: dict):
     """Randomly thins or thickens ink (toner spread / scanner threshold
@@ -244,6 +312,11 @@ STAGES: dict[str, Stage] = {
     "annotation_overlay": stage_annotation_overlay,
     "threshold": stage_threshold,
     "jpeg_roundtrip": stage_jpeg_roundtrip,
+    # FretCodex fork: a phone photo's stages (`profiles/phone.toml`).
+    "perspective_warp": stage_perspective_warp,
+    "paper_and_ink": stage_paper_and_ink,
+    "shadow": stage_shadow,
+    "unsharp": stage_unsharp,
 }
 
 

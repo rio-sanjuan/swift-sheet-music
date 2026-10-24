@@ -298,9 +298,11 @@ def main(argv: list[str] | None = None) -> int:
         # lacks (`SymbolNet.extra_head`); only that branch trains.
         if args.init is None:
             raise SystemExit("--new-classes-only needs --init")
-        state = torch.load(args.init, map_location="cpu")
+        state = torch.load(args.init, map_location="cpu", weights_only=False)
+        state = state.get("model_state_dict", state)  # a checkpoint, or a bare state dict
         old_rows = state["heatmap_head.weight"].shape[0]
         model = net.SymbolNet(num_classes=old_rows, extra_classes=len(prep.VOCABULARY) - old_rows)
+        # An --init that has the branch already (a run of this mode) carries on from it.
         missing, unexpected = model.load_state_dict(state, strict=False)
         if unexpected or any(not k.startswith("extra_head.") for k in missing):
             raise SystemExit(f"--init: missing {missing}, unexpected {unexpected}")

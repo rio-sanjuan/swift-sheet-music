@@ -1,0 +1,71 @@
+# FretCodex fork: a phone photo of a printed page as the detector sees it after FretCodex's
+# PageReader has found the page, squared its keystone by its staves and straightened it -- the
+# residue of a phone photo, not the photo. Amounts follow FretCodex's calibrated `phone` level
+# (its PageDistortion, measured on real photos, ADR 0006): grey grained paper with the sheet
+# under it showing through, bolder print than the engraving, light falling off, a soft-edged
+# shadow, the phone's blur, noise and sharpening, and lossy compression.
+
+[[stage]]
+name = "resample"
+scale_lo = 0.8
+scale_hi = 1.15
+aniso_max = 0.03
+
+[[stage]]
+name = "perspective_warp"
+max_frac = 0.015
+
+[[stage]]
+name = "rotate"
+max_deg = 1.0
+
+[[stage]]
+name = "erode_dilate"
+p_erode = 0.1
+p_dilate = 0.5
+elem_size = 2
+
+[[stage]]
+name = "gaussian_blur"
+sigma_lo = 0.5
+sigma_hi = 1.8
+
+[[stage]]
+name = "paper_and_ink"
+paper_lo = 165
+paper_hi = 240
+ink_lo = 0
+ink_hi = 70
+gamma_lo = 0.8
+gamma_hi = 1.25
+
+[[stage]]
+name = "bleed_through"
+alpha = 0.15
+p = 0.6
+
+[[stage]]
+name = "illumination_gradient"
+max_drop = 0.35
+
+[[stage]]
+name = "shadow"
+p = 0.5
+dark_lo = 0.55
+dark_hi = 0.85
+edge_lo = 4
+edge_hi = 40
+
+[[stage]]
+name = "noise"
+gauss_sigma = 8.0
+salt_pepper = 0.001
+
+[[stage]]
+name = "unsharp"
+p = 0.5
+
+[[stage]]
+name = "jpeg_roundtrip"
+quality_lo = 40
+quality_hi = 85
