@@ -1,5 +1,5 @@
 {
-  "checkpoint": "/Users/rtsj/omr-models/fc-tuplets-r4/checkpoint.pt",
+  "checkpoint": "/Users/rtsj/omr-models/fc-tuplets-r5/checkpoint.pt",
   "classes": [
     "brace",
     "noteheadDoubleWhole",
@@ -69,14 +69,18 @@
     "tuplet7",
     "tuplet9"
   ],
-  "commit": "5b082a6efaacbba3aae8fed6a358fb3383e84c48",
+  "commit": "c35857c6b0f940ddb510c1d0785e3d739420b5c3",
   "decode_defaults_measured": false,
   "mean": 0.0,
   "nms_radius_sp": 0.5,
   "overlap": 64,
   "prep_root": [
     "/Users/rtsj/Datasets/sheet-music-omr/fc-tuplets-v1-prep",
-    "/Users/rtsj/Datasets/sheet-music-omr/fc-tuplets-v2-prep"
+    "/Users/rtsj/Datasets/sheet-music-omr/fc-tuplets-v2-prep",
+    "/Users/rtsj/Datasets/sheet-music-omr/fc-tuplets-v1-scanner-prep",
+    "/Users/rtsj/Datasets/sheet-music-omr/fc-tuplets-v2-scanner-prep",
+    "/Users/rtsj/Datasets/sheet-music-omr/fc-tuplets-v1-phone-prep",
+    "/Users/rtsj/Datasets/sheet-music-omr/fc-tuplets-v2-phone-prep"
   ],
   "seed": 20261024,
   "staff_space_px": 12.0,
@@ -85,5 +89,5 @@
   "threshold": 0.3,
   "tile": 384,
   "top_k": 300,
-  "training_config_hash": "6cbe92955e011737efc7e6e5cd01d8dc0774d8065518b87bbc73c5054a0ecd03"
+  "training_config_hash": "b8ba3c49d1d9a4e8f4a96bc63a24f662c2da68fb005cdc2d92629068e27b5ca9"
 }
