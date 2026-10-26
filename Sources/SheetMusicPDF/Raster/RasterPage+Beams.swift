@@ -97,10 +97,16 @@ extension RasterPage {
     /// `k·0.5 + (k−1)·0.25` for some k in 1…4, and the slab is then split
     /// into k. That also means the splitting logic is exercised by every
     /// stacked beam rather than only by the 2–7% that happen to fuse.
+    ///
+    /// `measuresInkSpread` (FretCodex fork, F12): every run is first read net
+    /// of the page's ink spread (`inkSpreadPx`), so a page printed or
+    /// photographed bolder than the engraving still lands on the ladder.
     static func beamSegments(
         _ mask: InkMask, spacingPx: Double, transform: PageTransform, pageIndex: Int,
+        measuresInkSpread: Bool = false,
     ) -> [PathSegment] {
-        let slabs = linkSlabs(mask, spacingPx: spacingPx)
+        let spreadPx = measuresInkSpread ? inkSpreadPx(mask, spacingPx: spacingPx) : 0
+        let slabs = linkSlabs(mask, spacingPx: spacingPx, spreadPx: spreadPx)
         let minExtentPx = beamMinExtentInSpaces * spacingPx
         var out: [PathSegment] = []
         for slab in slabs {
@@ -229,13 +235,13 @@ extension RasterPage {
     /// it is right and cheap; do not credit it with corpus points it did
     /// not earn.
     private static func linkSlabs(
-        _ mask: InkMask, spacingPx: Double,
+        _ mask: InkMask, spacingPx: Double, spreadPx: Double,
     ) -> [[BeamColumn]] {
         let bridgePx = max(1, Int((beamBridgeInSpaces * spacingPx).rounded()))
         var open: [OpenSlab] = []
         var closed: [[BeamColumn]] = []
         for x in 0 ..< mask.width {
-            let runs = ladderColumns(mask, x: x, spacingPx: spacingPx)
+            let runs = ladderColumns(mask, x: x, spacingPx: spacingPx, spreadPx: spreadPx)
             var next: [OpenSlab] = []
             var consumed = [Bool](repeating: false, count: runs.count)
             let shares = fusedShares(runs: runs, open: open, consumed: &consumed)
@@ -301,14 +307,14 @@ extension RasterPage {
         }
     }
 
-    /// This column's ink runs, keeping only the ones whose thickness lands
-    /// on a ladder rung.
+    /// This column's ink runs, keeping only the ones whose thickness — net
+    /// of the page's ink spread, `spreadPx` — lands on a ladder rung.
     private static func ladderColumns(
-        _ mask: InkMask, x: Int, spacingPx: Double,
+        _ mask: InkMask, x: Int, spacingPx: Double, spreadPx: Double,
     ) -> [BeamColumn] {
         columnRuns(mask, x: x).compactMap { run in
             guard let levels = beamLevels(
-                runLengthPx: Double(run.y1 - run.y0 + 1), spacingPx: spacingPx,
+                runLengthPx: Double(run.y1 - run.y0 + 1) - spreadPx, spacingPx: spacingPx,
             ) else { return nil }
             return BeamColumn(x: x, y0: run.y0, y1: run.y1, levels: levels)
         }
@@ -374,5 +380,49 @@ extension RasterPage {
         }
         out.append(current)
         return out
+    }
+}
+
+extension RasterPage {
+    /// The thickness range a beam's runs are looked for in, in staff spaces: above any staff
+    /// line, however bold (a photographed page's binarize 0.3), and below a notehead's middle
+    /// columns (0.9–1.0), which out-count the beams on a page with few. FretCodex fork, F12.
+    static let inkSpreadSearchInSpaces = 0.4 ... 0.8
+
+    /// How much bolder this page's beams are than the engraving's 0.5 spaces, in pixels: the
+    /// commonest column-run thickness in `inkSpreadSearchInSpaces` over a single beam's — or
+    /// nothing, unless it is bolder by half the ladder's own tolerance or more. Less than that the
+    /// tolerance already takes (it is rounding: a pixel at 12–18 px a space), and thinner is
+    /// likelier a misreading than a page printed thin. FretCodex fork, F12.
+    ///
+    /// A beam gives the same run in every column it covers, so beams make the sharpest peak in
+    /// that range; a notehead's runs spread across it, and a staff line's lie below it. Two
+    /// other measures were tried on FretCodex's Lieder bench and dropped: the staff lines' own
+    /// thickness over an engraved line's, whose rounding at 12–21 px a space a photographed page's
+    /// beams do not share (photo level: values 0.781 → 0.697); and the median of the single beams
+    /// a first reading finds, which sees only the thinnest of a bold page's beams (phone level:
+    /// no gain).
+    static func inkSpreadPx(_ mask: InkMask, spacingPx: Double) -> Double {
+        let lo = Int((inkSpreadSearchInSpaces.lowerBound * spacingPx).rounded(.up))
+        let hi = Int((inkSpreadSearchInSpaces.upperBound * spacingPx).rounded(.down))
+        guard lo >= 1, hi >= lo else { return 0 }
+        var counts = [Int](repeating: 0, count: hi + 2)
+        for x in Swift.stride(from: 0, to: mask.width, by: 2) {
+            for run in columnRuns(mask, x: x) {
+                let n = run.y1 - run.y0 + 1
+                if n >= lo, n <= hi { counts[n] += 1 }
+            }
+        }
+        // Each thickness that occurs, with half of each neighbour's count, so a peak split across
+        // two pixel values is still one peak; ties go to the thinner.
+        var peak = lo, best = -1
+        for n in lo ... hi where counts[n] > 0 {
+            let smoothed = 2 * counts[n] + counts[n - 1] + counts[n + 1]
+            if smoothed > best { (peak, best) = (n, smoothed) }
+        }
+        guard best > 0 else { return 0 }
+        let spread = Double(peak) - beamSingleThicknessInSpaces * spacingPx
+        let tolerance = max(beamThicknessToleranceInSpaces * spacingPx, beamThicknessTolerancePx)
+        return spread >= tolerance / 2 ? spread : 0
     }
 }

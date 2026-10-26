@@ -13,6 +13,7 @@ enum RasterFrontEnd {
     static func page(
         bitmap: GrayBitmap, pageIndex: Int, detector: any OMRGlyphDetecting,
         diagnostics: (@Sendable (PDFImportDiagnostic) -> Void)?, keepsBeamsOutOfLines: Bool = false,
+        measuresInkSpread: Bool = false,
     ) throws -> (walked: WalkedContent, pageSize: CGSize) {
         // keepDeskewed: the detector consumes the deskewed grayscale. It is
         // opt-in because a page is ~18MB and holding one per page multiplies a
@@ -20,6 +21,7 @@ enum RasterFrontEnd {
         // this function's frame.
         let analysis = RasterPage.analyze(
             bitmap, pageIndex: pageIndex, keepDeskewed: true, keepsBeamsOutOfLines: keepsBeamsOutOfLines,
+            measuresInkSpread: measuresInkSpread,
         )
         return try assembled(
             analysis: analysis, pageIndex: pageIndex, detector: detector,

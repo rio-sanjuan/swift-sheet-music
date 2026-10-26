@@ -94,6 +94,7 @@ extension PDFImporter {
                     bitmap: bitmap, pageIndex: index, detector: detector,
                     diagnostics: options.diagnostics,
                     keepsBeamsOutOfLines: options.omrKeepsBeamsOutOfStaffLines,
+                    measuresInkSpread: options.omrBeamInkSpread,
                 )
             } catch {
                 // Same shape as the missing-`CGPDFPage` case above: say what

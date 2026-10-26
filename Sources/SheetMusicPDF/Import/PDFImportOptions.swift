@@ -165,6 +165,18 @@ public struct PDFImportOptions: Sendable {
     /// and a beam's 50 points are a few staff spaces long.
     public var omrKeepsBeamsOutOfStaffLines = false
 
+    /// Whether a raster page's beams are read net of the page's ink spread. Off by default.
+    ///
+    /// FretCodex fork, F12. A beam is found by the thickness of its ink, column by column, on a
+    /// ladder of 0.5 staff spaces a beam and 0.25 between stacked ones. A photographed page's ink
+    /// is bolder and softer than the engraving's: on FretCodex's phone-photo bench a beam
+    /// binarizes 0.6–0.7 spaces thick, so a single beam lands at or past its rung and a stacked
+    /// pair past its own, and the group's notes are read as quarters. On, the page's commonest
+    /// beam-like run says how much bolder its ink is (`RasterPage.inkSpreadPx`), and every column
+    /// run is read that much thinner before it is put on the ladder. A page printed as engraved
+    /// spreads nothing and reads as before.
+    public var omrBeamInkSpread = false
+
     /// Whether a system whose staves are coupled into parts unlike the
     /// reference system's still fills the parts staff by staff, from the top,
     /// rather than part by part. Off by default.

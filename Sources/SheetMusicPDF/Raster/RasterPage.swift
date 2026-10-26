@@ -61,9 +61,11 @@ extension RasterPage {
     /// them in.
     ///
     /// `keepsBeamsOutOfLines` leaves a beam's ink out of the staff lines
-    /// (`PDFImportOptions.omrKeepsBeamsOutOfStaffLines`).
+    /// (`PDFImportOptions.omrKeepsBeamsOutOfStaffLines`); `measuresInkSpread`
+    /// reads the beams net of the page's ink spread (`omrBeamInkSpread`).
     static func analyze(
         _ bitmap: GrayBitmap, pageIndex: Int, keepDeskewed: Bool = false, keepsBeamsOutOfLines: Bool = false,
+        measuresInkSpread: Bool = false,
     ) -> RasterPageAnalysis {
         let angle = estimateSkewDegrees(binarize(bitmap))
         let straight = rotate(bitmap, degrees: -angle)
@@ -88,6 +90,7 @@ extension RasterPage {
         // from a clef stroke of the same length.
         let beams = beamSegments(
             mask, spacingPx: spacingPx, transform: transform, pageIndex: pageIndex,
+            measuresInkSpread: measuresInkSpread,
         )
         paths += verticalSegments(
             mask, spacingPx: spacingPx, transform: transform, pageIndex: pageIndex,
