@@ -33,6 +33,8 @@ extension PDFImporter {
         var digitCenterX: CGFloat
         var digitOrigin: CGPoint
         var anchor: Anchor
+        /// FretCodex fork, F11: a numeral the detector read weakly (`PDFImporter.isWeak`).
+        var weak = false
     }
 
     /// How far outside the staff (in spatia) a tuplet number may sit.
@@ -192,6 +194,9 @@ extension PDFImporter {
         var marks: [TupletMark] = []
         for glyph in texts where glyph.pageIndex == pageIndex {
             guard let ratio = tupletRatio(forDigit: glyph.text) else { continue }
+            // F11: a weak 6 is set aside. It names a triplet's ratio (4:6 is 2:3), so a stray one
+            // makes a triplet of three eighths, and it is the detector's least precise numeral.
+            if glyph.isDetectedNumeral, ratio.actual == 6, isWeak(glyph) { continue }
             let y = glyph.origin.y
             // Outside the five lines, but not far outside.
             let band = glyph.isDetectedNumeral ? tupletDetectedBandSpatia * spatium : band
@@ -211,6 +216,7 @@ extension PDFImporter {
                 digitCenterX: digitCenterX(glyph),
                 digitOrigin: glyph.origin,
                 anchor: anchor,
+                weak: glyph.isDetectedNumeral && isWeak(glyph),
             ))
         }
         return marks.sorted { $0.xRange.lowerBound < $1.xRange.lowerBound }
@@ -306,6 +312,17 @@ extension PDFImporter {
         return candidates
             .map(beamMemberSpan)
             .min { ($0.upperBound - $0.lowerBound) < ($1.upperBound - $1.lowerBound) }
+    }
+
+    /// FretCodex fork, F11: below this detector score a detected numeral is weak. The detector
+    /// keeps what scores over 0.3; on FretCodex's Lieder bench (design songs, photographed,
+    /// phone and binder levels) every numeral that made tuplets on a page with none scored
+    /// 0.30–0.37, against a median of about 0.5 for those on pages with tuplets — but true
+    /// numerals score that low too, so a weak numeral is set aside only on other evidence.
+    static let tupletWeakNumeralScore: Double = 0.4
+
+    static func isWeak(_ digit: TextGlyph) -> Bool {
+        (digit.detectorScore ?? 1) < tupletWeakNumeralScore
     }
 
     /// A beam's x-range as a MEMBERSHIP window — padded by

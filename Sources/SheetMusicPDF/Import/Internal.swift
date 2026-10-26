@@ -159,6 +159,8 @@ enum SMuFLSemantic: Equatable, Hashable {
 struct ClassifiedGlyph: Hashable {
     var geometry: GlyphGeometry
     var semantic: SMuFLSemantic
+    /// FretCodex fork, F11: the detector's score for a glyph it read; 1 for every other front-end.
+    var score: Double = 1
 }
 
 /// A non-music-glyph text run (lyrics, tempo text, title, …).
@@ -190,6 +192,9 @@ struct TextGlyph {
     /// on changes those detectors' output and needs its own corpus gate.
     var bbox: CGRect
     var pageIndex: Int
+    /// FretCodex fork, F11: a detected numeral's score (`RasterFrontEnd.tupletNumeralsAsText`);
+    /// nil for a PDF's own text.
+    var detectorScore: Double? = nil
 }
 
 /// Output of stage [4]. One staff (5-line band) on a page.

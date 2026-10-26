@@ -206,6 +206,7 @@ struct OMRGlyphDetector: OMRGlyphDetecting {
                 fontSize: 0,
             ),
             semantic: semantic,
+            score: detection.score,
         )
     }
 }

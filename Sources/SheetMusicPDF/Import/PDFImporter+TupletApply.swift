@@ -58,6 +58,9 @@ extension PDFImporter {
                 mark: mark, in: out, claimed: claimed, widen: true, spatium: spatium,
             )
             guard widened.count >= 2 else { continue }
+            // FretCodex fork, F11: a weak numeral's beam spans its tuplet, or two of them under
+            // one primary — not a run of 16 notes it happens to sit near.
+            if mark.weak, mark.anchor == .beam, widened.count > 2 * mark.actual { continue }
             if mark.anchor == .bracket {
                 applyBracket(mark, widened: widened, elements: &out, claimed: &claimed, spatium: spatium)
             } else if let run = bestRun(widened, in: out, mark: mark, spatium: spatium),

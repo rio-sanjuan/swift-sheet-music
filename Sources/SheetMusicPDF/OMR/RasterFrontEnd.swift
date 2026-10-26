@@ -87,10 +87,10 @@ extension RasterFrontEnd {
         _ detected: [ClassifiedGlyph], pageIndex: Int,
     ) -> (glyphs: [ClassifiedGlyph], texts: [TextGlyph]) {
         var glyphs: [ClassifiedGlyph] = []
-        var numerals: [(digit: Int, geometry: GlyphGeometry)] = []
+        var numerals: [(digit: Int, geometry: GlyphGeometry, score: Double)] = []
         for glyph in detected {
             if case let .tupletDigit(digit) = glyph.semantic {
-                numerals.append((digit, glyph.geometry))
+                numerals.append((digit, glyph.geometry, glyph.score))
             } else {
                 glyphs.append(glyph)
             }
@@ -105,7 +105,7 @@ extension RasterFrontEnd {
             let rb = commonness.firstIndex(of: numerals[b].digit) ?? commonness.count
             return ra != rb ? ra < rb : a < b
         }.map { numerals[$0] }
-        var kept: [(digit: Int, geometry: GlyphGeometry)] = []
+        var kept: [(digit: Int, geometry: GlyphGeometry, score: Double)] = []
         for numeral in ordered {
             let o = numeral.geometry.origin, reach = 0.5 * numeral.geometry.renderedSize
             guard !kept.contains(where: { abs($0.geometry.origin.x - o.x) < reach && abs($0.geometry.origin.y - o.y) < reach })
@@ -117,6 +117,7 @@ extension RasterFrontEnd {
                 text: String(numeral.digit), fontName: tupletNumeralFont,
                 fontSize: numeral.geometry.renderedSize, renderedSize: numeral.geometry.renderedSize,
                 origin: numeral.geometry.origin, bbox: .zero, pageIndex: pageIndex,
+                detectorScore: numeral.score,
             )
         }
         return (glyphs, texts)
